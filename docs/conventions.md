@@ -8,14 +8,25 @@ can be ported to Rust/WASM later.
 
 - **World frame:** right-handed, **Z-up**. `x` is forward/east, `y` is
   left/north, `z` is up. Gravity is `[0, 0, -9.81]` by default.
-- **Body frame:** right-handed, attached to the rigid body at its centre of
-  mass. `x` is forward, `y` is left, `z` is up.
+- **Body frame:** right-handed **FLU** (forward, left, up), attached to the
+  rigid body at its centre of mass. `x` is forward, `y` is left, `z` is up.
 - Position `p` and velocity `v` are expressed in the **world** frame.
 - Angular velocity `ω` and applied torque `τ` are expressed in the **body**
   frame, about the centre of mass. Applied force `F` is expressed in the
   **world** frame.
 - The inertia tensor `I` is constant, symmetric, positive definite, and
   expressed in the **body** frame about the centre of mass.
+
+## Rotors and layouts (Milestone 2)
+
+- Rotor speed `ω ≥ 0` is a magnitude in rad/s. `spin = +1` means
+  counter-clockwise seen from above, i.e. about body `+z`; the reaction torque
+  on the airframe is clockwise about `-z`:
+  `Q = -spin · kQ · ω · |ω|`, which equals `-spin · kQ · ω²` for `ω ≥ 0`.
+- Rotor thrust acts along body `+z` and preset hubs lie at body `z = 0`.
+- Hub angles are measured counter-clockwise from body `+x`: quad starts at
+  45° (`π/4`); hex and octo start at 0°. Spins alternate by index, starting
+  with `+1`. See [multirotor.md](multirotor.md).
 
 ## Quaternions
 
@@ -65,6 +76,8 @@ All quantities use SI units unless stated otherwise:
 - Outputs are bit-identical for identical inputs on the same JavaScript engine.
   Cross-engine results may differ in the last bits because `Math.sin`/`cos`
   implementations are not required to be bit-identical.
+- The demo's printed SHA-256 (`npm run demo:hover`) is a checkable determinism
+  artifact for one engine, not a cross-engine guarantee.
 
 ## Scope of Milestone 1
 
@@ -72,3 +85,10 @@ A single rigid body with constant mass and inertia, gravity, and externally
 supplied force/torque inputs. No motors, mixer, aerodynamics, drag, sensors,
 controllers, or ground contact yet. Those inputs are included now so Milestone 2
 can plug in a multirotor model without refactoring the core.
+
+## Scope of Milestone 2
+
+Motors (`T = kT·ω²`, first-order lag and clamping), quad/hex/octo layouts, the
+minimum-norm allocation mixer, body-frame air-relative drag with an `Environment`
+wind argument, and opt-in single-point ground contact. The Milestone 1 rigid-body
+core is unchanged; details and limitations are in [multirotor.md](multirotor.md).

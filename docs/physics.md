@@ -89,6 +89,9 @@ Milestone 1 assumes a single rigid body with constant mass and inertia. There is
 no ground contact; the demo box falls through `z = 0`. There is no aerodynamic
 drag, motor lag, actuator saturation, sensor noise, or wind.
 
+Milestone 2 adds motors, drag and optional ground contact on top of this
+unchanged core; see [multirotor.md](multirotor.md).
+
 ## Further reading
 
 - Schaub & Junkins, *Analytical Mechanics of Space Systems* — rigid-body
