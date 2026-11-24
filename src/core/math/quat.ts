@@ -99,6 +99,47 @@ export function quatToRotationMatrix(q: Quat): Mat3 {
   );
 }
 
+/**
+ * Unit quaternion from a rotation matrix (row-major, body columns in world),
+ * i.e. the inverse of `quatToRotationMatrix`. Uses the trace/largest-diagonal
+ * branches so 180° rotations are handled without division by zero. The sign
+ * of the returned quaternion is arbitrary: `q` and `-q` are the same rotation.
+ */
+export function quatFromRotationMatrix(m: Mat3): Quat {
+  const trace = m[0] + m[4] + m[8];
+  let w: number;
+  let x: number;
+  let y: number;
+  let z: number;
+
+  if (trace > 0) {
+    const s = 2 * Math.sqrt(1 + trace);
+    w = 0.25 * s;
+    x = (m[7] - m[5]) / s;
+    y = (m[2] - m[6]) / s;
+    z = (m[3] - m[1]) / s;
+  } else if (m[0] > m[4] && m[0] > m[8]) {
+    const s = 2 * Math.sqrt(1 + m[0] - m[4] - m[8]);
+    w = (m[7] - m[5]) / s;
+    x = 0.25 * s;
+    y = (m[1] + m[3]) / s;
+    z = (m[2] + m[6]) / s;
+  } else if (m[4] > m[8]) {
+    const s = 2 * Math.sqrt(1 + m[4] - m[0] - m[8]);
+    w = (m[2] - m[6]) / s;
+    x = (m[1] + m[3]) / s;
+    y = 0.25 * s;
+    z = (m[5] + m[7]) / s;
+  } else {
+    const s = 2 * Math.sqrt(1 + m[8] - m[0] - m[4]);
+    w = (m[3] - m[1]) / s;
+    x = (m[2] + m[6]) / s;
+    y = (m[5] + m[7]) / s;
+    z = 0.25 * s;
+  }
+  return quatNormalize([w, x, y, z]);
+}
+
 /** Quaternion time derivative: q_dot = 0.5 * q ⊗ (0, ω_body). */
 export function quatDerivative(q: Quat, omegaBody: Vec3): Quat {
   const omegaQuat: Quat = [0, omegaBody[0], omegaBody[1], omegaBody[2]];

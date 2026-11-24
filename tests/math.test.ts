@@ -14,6 +14,7 @@ import {
   quatConjugate,
   quatDerivative,
   quatFromAxisAngle,
+  quatFromRotationMatrix,
   quatMultiply,
   quatNormalize,
   quatRotateVector,
@@ -226,5 +227,39 @@ describe("quat", () => {
     expectNumberClose(euler[0], 0);
     expectNumberClose(euler[1], Math.PI / 2);
     expectNumberClose(euler[2], yaw);
+  });
+});
+
+describe("quatFromRotationMatrix", () => {
+  test("round trips for the trace-positive branch", () => {
+    const q = quatNormalize([0.9, 0.2, -0.3, 0.1]);
+    const back = quatFromRotationMatrix(quatToRotationMatrix(q));
+    expectMat3Close(quatToRotationMatrix(back), quatToRotationMatrix(q));
+    expect(Math.abs(back[0] * q[0] + back[1] * q[1] + back[2] * q[2] + back[3] * q[3])).toBeCloseTo(1, 12);
+  });
+
+  test("handles all three 180-degree largest-diagonal branches", () => {
+    const cases: readonly Quat[] = [
+      [0, 1, 0, 0], // m[0] branch
+      [0, 0, 1, 0], // m[4] branch
+      [0, 0, 0, 1], // m[8] branch
+    ];
+    for (const q of cases) {
+      const matrix = quatToRotationMatrix(q);
+      const back = quatFromRotationMatrix(matrix);
+      expectMat3Close(quatToRotationMatrix(back), matrix);
+      expect(
+        Math.abs(back[0] * q[0] + back[1] * q[1] + back[2] * q[2] + back[3] * q[3]),
+      ).toBeCloseTo(1, 12);
+    }
+  });
+
+  test("the sign convention matches quatToRotationMatrix", () => {
+    const q = quatFromAxisAngle(vec3(0, 1, 0), 0.7);
+    const negated: Quat = [-q[0], -q[1], -q[2], -q[3]];
+    expectMat3Close(
+      quatToRotationMatrix(quatFromRotationMatrix(quatToRotationMatrix(q))),
+      quatToRotationMatrix(negated),
+    );
   });
 });
