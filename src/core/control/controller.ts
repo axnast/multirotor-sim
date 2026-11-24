@@ -8,9 +8,8 @@
  * mixer does not shed yaw and wind up the yaw integrator. Roll/pitch keep a
  * fixed 20 rad/s² ceiling.
  *
- * The full position→attitude→rate cascade (`controllerStep`) is added with the
- * position loop; this file currently holds the inner rate loop used by M3
- * tests 2 and 3.
+ * `controllerStep` composes position → attitude → rate into the body wrench
+ * consumed directly by `mix()`.
  */
 
 import { vec3Cross, vec3Length, type Vec3 } from "../math/vec3";
@@ -20,13 +19,18 @@ import {
   type MotorConfig,
   type MultirotorConfig,
 } from "../multirotor/config";
+import { attitudeRateCommand } from "./attitude";
 import { emptyPidState, pidStep } from "./pid";
+import { positionStep } from "./position";
 import type {
   AxisPidState,
   ControllerParams,
+  ControllerState,
+  ControllerStepResult,
   Measurement,
   PidConfig,
   PidResult,
+  Setpoint,
 } from "./types";
 
 function assertFinite(name: string, value: number): void {
@@ -101,6 +105,7 @@ export function defaultControllerParams(config: MultirotorConfig): ControllerPar
     gravity: config.gravity,
     position: {
       gains: { kp: 0.25, ki: 0.01, kd: 1.0 },
+      integralSeparation: 0.1,
       maxAccelXY: 6,
       maxAccelZ: 3,
       maxTilt: Math.PI / 6,
@@ -131,6 +136,7 @@ export function validateControllerParams(params: ControllerParams): void {
   assertPositive("position.kp", params.position.gains.kp);
   assertFinite("position.ki", params.position.gains.ki);
   assertFinite("position.kd", params.position.gains.kd);
+  assertPositive("integralSeparation", params.position.integralSeparation);
   assertPositive("maxAccelXY", params.position.maxAccelXY);
   assertPositive("maxAccelZ", params.position.maxAccelZ);
   assertPositive("maxTilt", params.position.maxTilt);
@@ -156,7 +162,7 @@ export function validateControllerParams(params: ControllerParams): void {
 }
 
 /** A fresh, fully zeroed controller state. */
-export function initialControllerState(): { position: AxisPidState; rate: AxisPidState } {
+export function initialControllerState(): ControllerState {
   return {
     position: [emptyPidState(), emptyPidState(), emptyPidState()],
     rate: [emptyPidState(), emptyPidState(), emptyPidState()],
@@ -223,5 +229,48 @@ export function rateStep(
       params.inertiaDiagonal[2] * alpha[2] + gyroscopic[2],
     ],
     saturated: [x.saturated, y.saturated, z.saturated],
+  };
+}
+
+/**
+ * One full cascade step: position -> attitude -> rate. The returned wrench is
+ * exactly the `Wrench` accepted by `mix()`. All state (both PID memories) is
+ * returned explicitly; nothing is hidden in the params or the functions.
+ */
+export function controllerStep(
+  controllerState: ControllerState,
+  measurement: Measurement,
+  setpoint: Setpoint,
+  params: ControllerParams,
+  dt: number,
+): ControllerStepResult {
+  validateControllerParams(params);
+  const outer = positionStep(
+    controllerState.position,
+    measurement,
+    setpoint,
+    params,
+    dt,
+  );
+  const desiredRate = attitudeRateCommand(
+    measurement.orientation,
+    outer.desiredOrientation,
+    params.attitude,
+  );
+  const inner = rateStep(
+    controllerState.rate,
+    desiredRate,
+    measurement,
+    params,
+    dt,
+  );
+  return {
+    state: { position: outer.state, rate: inner.state },
+    wrench: [
+      outer.thrust,
+      inner.torque[0],
+      inner.torque[1],
+      inner.torque[2],
+    ],
   };
 }

@@ -58,6 +58,12 @@ export interface PidResult {
 
 export interface PositionParams {
   readonly gains: PidGains;
+  /**
+   * Integral separation (m): integrate position error only inside this band,
+   * or whenever motion is away from the setpoint. Prevents integral windup
+   * during a long approach while retaining zero steady-state error.
+   */
+  readonly integralSeparation: number;
   readonly maxAccelXY: number;
   readonly maxAccelZ: number;
   readonly maxTilt: number;
