@@ -3,10 +3,10 @@
 A multirotor flight simulator with a cascaded PID controller and an
 automatic PID tuner.
 
-> **Status:** Milestone 2 (multirotor model) is complete. The core is pure,
-> deterministic TypeScript. At the time of writing `npm test` reports 153
+> **Status:** Milestone 3 (cascaded controller) is complete. The core is pure,
+> deterministic TypeScript. At the time of writing `npm test` reports 178
 > passing tests and 1 deliberately skipped (no motor-failure model); run it for
-> the current count. No controller or 3D viewer yet; see the roadmap.
+> the current count. No 3D viewer or autotuner yet; see the roadmap.
 
 <!-- Plot placeholder: once the PNG exists, replace this comment with
      ![Hover, takeoff and roll-pulse trace](docs/hover-demo.png) -->
@@ -24,7 +24,7 @@ automatic PID tuner.
       gyroscopic term, RK4/Euler integrators, conservation test suite
 - [x] **M2 — Multirotor model:** motor thrust/torque from RPM², quad/hex/octo
       layouts, mixer matrix, motor lag, drag, ground contact
-- [ ] **M3 — Cascaded PID controller:** rate → angle → position loops,
+- [x] **M3 — Cascaded PID controller:** rate → angle → position loops,
       filtered derivative, anti-windup, waypoints
 - [ ] **M4 — 3D viewer:** Three.js scene, trail, live plots, gain sliders
 - [ ] **M5 — Disturbances:** wind gusts, sensor noise, battery sag, payload shift
@@ -49,12 +49,15 @@ npm test           # full Vitest suite (single run)
 npm run test:watch # watch mode during development
 npm run typecheck  # strict TypeScript check
 npm run demo       # 10 s tumbling-box CSV trace -> out/drop-box.csv
-npm run demo:hover # 3 x 10 s hover, takeoff and roll-pulse trace -> out/hover.csv
+npm run demo:hover  # 3 x 10 s hover, takeoff and roll-pulse trace -> out/hover.csv
+npm run demo:flight # hex takeoff, square waypoints and hold -> out/flight.csv
 ```
 
 `npm run demo:hover` writes a 1 kHz, 41-column CSV (30 003 rows) with
 commanded and achieved wrenches, ground impulses and energies; the model and
 sign conventions are documented in [docs/multirotor.md](docs/multirotor.md).
+`npm run demo:flight` writes a 1 kHz, 35-column CSV of setpoint and actual
+flight states under the cascaded controller; see [docs/control.md](docs/control.md).
 
 CI runs `npm ci`, `npm run typecheck`, and `npm test` on Node 20, 22, and 24.
 
@@ -64,9 +67,10 @@ CI runs `npm ci`, `npm run typecheck`, and `npm test` on Node 20, 22, and 24.
 src/core/math/        pure Vec3, Quat, Mat3 primitives
 src/core/             rigid-body dynamics, integrators, energy diagnostics
 src/core/multirotor/  config, motors, mixer, dynamics, ground contact
+src/core/control/     PID, attitude, position loops and the cascade
 tests/                Vitest unit and physics tests
 scripts/              runnable demo scripts
-docs/                 conventions, physics and multirotor notes
+docs/                 conventions, physics, multirotor and control notes
 out/                  generated CSV traces (gitignored)
 ```
 
