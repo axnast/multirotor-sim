@@ -1,12 +1,10 @@
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-.pytest_cache/
-build/
+node_modules/
 dist/
+coverage/
+.vite/
+*.tsbuildinfo
 out/
 .DS_Store
 .idea/
 .vscode/
+*.log

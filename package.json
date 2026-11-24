@@ -1,0 +1,22 @@
+{
+  "name": "multirotor-sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multirotor flight simulator with cascaded PID control and automatic PID tuning",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx scripts/dropBox.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.12"
+  }
+}
