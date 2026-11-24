@@ -28,6 +28,11 @@
  *   field non-smooth). The final speeds are projected onto their limits.
  * - `dt` is caller-chosen: `dt ≤ τ/10` gives sub-0.01 % lag error and RK4's
  *   linear stability limit is `dt < 2.79 τ`. No substepping is performed.
+ *
+ * Ground contact, when enabled by `config.groundPlane`, is resolved by the
+ * stepper after the RK4 step and quaternion normalization. It is deliberately
+ * absent from `multirotorDerivatives`: contact is a non-smooth event, not a
+ * force in the ODE. See ground.ts for the contact model and its limitations.
  */
 
 import {
@@ -49,6 +54,13 @@ import {
   type MotorConfig,
   type MultirotorConfig,
 } from "./config";
+import {
+  DEFAULT_GROUND_PARAMS,
+  resolveGroundContact,
+  validateGroundParams,
+  type GroundContactResult,
+  type GroundParams,
+} from "./ground";
 import {
   clampMotorCommand,
   motorReactionTorque,
@@ -435,23 +447,34 @@ function weightedDerivative(
   };
 }
 
+/** One step plus optional ground-contact diagnostics. */
+export interface MultirotorStepResult {
+  readonly state: MultirotorState;
+  /** null when `config.groundPlane` is false. */
+  readonly ground: GroundContactResult | null;
+}
+
 /**
- * One classical RK4 step over the extended state. Commands are held constant
- * across the step. The quaternion is normalized once after the step and the
- * resulting motor speeds are projected onto [minOmega, maxOmega].
+ * One classical RK4 step over the extended state, then contact resolution.
+ * Commands are held constant across the step. The quaternion is normalized
+ * once after the step, the motor speeds are projected onto their limits, and
+ * only then is ground contact applied to the fully resolved body. When the
+ * plane is disabled the state is identical to the free-flight RK4 result.
  */
-export function stepMultirotor(
+export function stepMultirotorDetailed(
   state: MultirotorState,
   config: MultirotorConfig,
   motorCommands: readonly number[],
   dt: number,
   environment: Environment = STILL_AIR,
-): MultirotorState {
+  ground: GroundParams = DEFAULT_GROUND_PARAMS,
+): MultirotorStepResult {
   assertValidDt(dt);
   validateConfig(config);
   assertValidState(state, config);
   assertValidCommands(motorCommands, config);
   assertValidEnvironment(environment);
+  validateGroundParams(ground);
 
   const commands = clampCommands(motorCommands, config);
   const k1 = evaluate(state, config, commands, environment);
@@ -460,14 +483,37 @@ export function stepMultirotor(
   const k4 = evaluate(addScaled(state, k3, dt), config, commands, environment);
 
   const next = addScaled(state, weightedDerivative(k1, k2, k3, k4), dt);
-  return {
-    body: {
-      ...next.body,
-      orientation: quatNormalize(next.body.orientation),
-    },
-    motorSpeeds: next.motorSpeeds.map((speed, index) => {
-      const motor = motorAt(config.motors, index);
-      return Math.min(motor.maxOmega, Math.max(motor.minOmega, speed));
-    }),
+  const body: RigidBodyState = {
+    ...next.body,
+    orientation: quatNormalize(next.body.orientation),
   };
+  const motorSpeeds = next.motorSpeeds.map((speed, index) => {
+    const motor = motorAt(config.motors, index);
+    return Math.min(motor.maxOmega, Math.max(motor.minOmega, speed));
+  });
+
+  const contact = config.groundPlane
+    ? resolveGroundContact(body, config.mass, ground)
+    : null;
+  return {
+    state: {
+      body: contact?.body ?? body,
+      motorSpeeds,
+    },
+    ground: contact,
+  };
+}
+
+/** One multirotor step; the stable wrapper around `stepMultirotorDetailed`. */
+export function stepMultirotor(
+  state: MultirotorState,
+  config: MultirotorConfig,
+  motorCommands: readonly number[],
+  dt: number,
+  environment: Environment = STILL_AIR,
+  ground: GroundParams = DEFAULT_GROUND_PARAMS,
+): MultirotorState {
+  return stepMultirotorDetailed(
+    state, config, motorCommands, dt, environment, ground,
+  ).state;
 }

@@ -281,6 +281,15 @@ describe("multirotor config validation", () => {
     );
   });
 
+  test("rejects a non-boolean groundPlane", () => {
+    expect(() =>
+      validateConfig({ ...base, groundPlane: 1 as unknown as boolean }),
+    ).toThrow(RangeError);
+    expect(() =>
+      validateConfig({ ...base, groundPlane: undefined as unknown as boolean }),
+    ).toThrow(RangeError);
+  });
+
   test("rejects invalid motor parameters", () => {
     const invalidMotor: ReadonlyArray<Partial<MotorConfig>> = [
       { position: [0, 0, Number.NaN] },

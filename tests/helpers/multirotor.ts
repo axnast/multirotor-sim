@@ -22,6 +22,10 @@ import {
   type Environment,
   type MultirotorState,
 } from "../../src/core/multirotor/dynamics";
+import {
+  DEFAULT_GROUND_PARAMS,
+  type GroundParams,
+} from "../../src/core/multirotor/ground";
 import type { Wrench } from "../../src/core/multirotor/mixer";
 
 /** Default absolute tolerance for algebraic identities. */
@@ -105,10 +109,11 @@ export function stepN(
   steps: number,
   dt: number,
   environment: Environment = STILL_AIR,
+  ground: GroundParams = DEFAULT_GROUND_PARAMS,
 ): MultirotorState {
   let current = state;
   for (let index = 0; index < steps; index++) {
-    current = stepMultirotor(current, config, commands, dt, environment);
+    current = stepMultirotor(current, config, commands, dt, environment, ground);
   }
   return current;
 }

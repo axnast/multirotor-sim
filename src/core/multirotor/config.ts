@@ -62,7 +62,12 @@ export interface MultirotorConfig {
   readonly motors: readonly MotorConfig[];
   /** Aerodynamic drag, body frame. */
   readonly drag: DragConfig;
-  /** Enables the crude ground plane at world z = 0. */
+  /**
+   * Enables the opt-in ground plane at world z = 0. Contact is a single-point,
+   * inelastic-by-default impulse at the centre of mass with Coulomb friction;
+   * see ground.ts. No landing gear, tipping, support polygon or ground effect
+   * is modelled, and contact applies no torque.
+   */
   readonly groundPlane: boolean;
 }
 
@@ -139,6 +144,10 @@ export function validateConfig(config: MultirotorConfig): void {
   assertFiniteVec3("gravity", config.gravity);
   assertNonNegativeVec3("drag.linear", config.drag.linear);
   assertNonNegativeVec3("drag.quadratic", config.drag.quadratic);
+
+  if (typeof config.groundPlane !== "boolean") {
+    throw new RangeError("groundPlane must be a boolean");
+  }
 
   if (config.motors.length < 4) {
     throw new RangeError("a multirotor needs at least four motors");

@@ -28,10 +28,15 @@ import {
   motorWrench,
   multirotorDerivatives,
   stepMultirotor,
+  stepMultirotorDetailed,
   totalThrust,
   type Environment,
   type MultirotorState,
 } from "../src/core/multirotor/dynamics";
+import {
+  DEFAULT_GROUND_PARAMS,
+  type GroundContactResult,
+} from "../src/core/multirotor/ground";
 import {
   mix,
   mixDetailed,
@@ -550,5 +555,103 @@ describe("M2 integration matrix", () => {
     const derivative = multirotorDerivatives(state, config, commands);
     vecClose(derivative.body.velocity, [0, -9.81, -9.81], 1e-9);
     vecClose(derivative.body.angularVelocity, [0, 0, 0], 1e-12);
+  });
+
+  describe("ground plane integration", () => {
+    function groundConfig(): MultirotorConfig {
+      return makeHex({
+        groundPlane: true,
+        linearDrag: [0, 0, 0],
+        quadraticDrag: [0, 0, 0],
+      });
+    }
+
+    test("14. ground takeoff at 1.1x hover thrust", () => {
+      const config = groundConfig();
+      const wrench: Wrench = [1.1 * config.mass * 9.81, 0, 0, 0];
+      const commands = mix(config, wrench);
+      let state = makeState(config, {
+        position: [0, 0, 0],
+        motorSpeeds: commands,
+      });
+      let ground: GroundContactResult | null = null;
+
+      for (let index = 0; index < 2000; index++) {
+        const result = stepMultirotorDetailed(state, config, commands, 1e-3);
+        state = result.state;
+        ground = result.ground;
+      }
+
+      close(state.body.position[2], 1.962, 1e-9);
+      close(at(state.body.velocity, 2), 1.962, 1e-9);
+      expect(ground?.contacted).toBe(false);
+    });
+
+    test("15. rests under 0.9x hover thrust", () => {
+      const config = groundConfig();
+      // Start at the mixed speeds: no lag transient can lift the vehicle and
+      // the commanded-speed assertion stays exact.
+      const commands = mix(config, [0.9 * config.mass * 9.81, 0, 0, 0]);
+      let state = makeState(config, {
+        position: [0, 0, 0],
+        motorSpeeds: commands,
+      });
+      expect(state.motorSpeeds).toEqual(commands);
+
+      state = stepN(state, config, commands, 1000, 1e-3);
+
+      vecClose(state.body.position, [0, 0, 0], 1e-12);
+      vecClose(state.body.velocity, [0, 0, 0], 1e-12);
+      for (const [index, speed] of state.motorSpeeds.entries()) {
+        close(speed, at(commands, index), 1e-12);
+      }
+    });
+
+    test("16. ground does not alter free flight above the plane", () => {
+      const withGround = groundConfig();
+      const withoutGround = makeHex({
+        groundPlane: false,
+        linearDrag: [0, 0, 0],
+        quadraticDrag: [0, 0, 0],
+      });
+      const commands = mix(withGround, [1.1 * withGround.mass * 9.81, 0, 0, 0]);
+
+      const run = (config: MultirotorConfig): MultirotorState =>
+        stepN(
+          makeState(config, { position: [0, 0, 5], motorSpeeds: commands }),
+          config,
+          commands,
+          1000,
+          1e-3,
+        );
+
+      expect(run(withGround)).toEqual(run(withoutGround));
+    });
+
+    test("17. ground friction stops a sliding vehicle", () => {
+      const config = groundConfig();
+      // Zero motor speeds: a hover start would leave T ≈ mg during spin-down
+      // and remove most of the friction that this test measures.
+      const commands = mix(config, [0, 0, 0, 0]);
+      expect(commands.every((speed) => speed === 0)).toBe(true);
+      let state = makeState(config, {
+        position: [0, 0, 0],
+        velocity: [1, 0, 0],
+        motorSpeeds: commands,
+      });
+      expect(state.motorSpeeds.every((speed) => speed === 0)).toBe(true);
+
+      state = stepN(state, config, commands, 1000, 1e-3);
+
+      // Exact discrete distance, not the continuous v0²/(2μg) = 0.08494733 m:
+      // friction follows the position update, adding ~v0·dt/2 = 5e-4 m.
+      const mu = DEFAULT_GROUND_PARAMS.friction;
+      const steps = Math.ceil(1 / (mu * 9.81 * 1e-3));
+      const exact = 1e-3 * (steps - mu * 9.81 * 1e-3 * (steps * (steps - 1)) / 2);
+      expect(steps).toBe(170);
+      close(state.body.position[0], exact, 1e-9);
+      close(at(state.body.velocity, 0), 0, 1e-12);
+      expect(state.body.position[2]).toBe(0);
+    });
   });
 });
