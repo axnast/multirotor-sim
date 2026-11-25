@@ -32,7 +32,7 @@ body,
 
 #axis-legend {
   position: absolute;
-  left: 16px;
+  right: 16px;
   bottom: 16px;
   padding: 10px 12px;
   border: 1px solid rgba(148, 163, 184, 0.25);
@@ -70,6 +70,141 @@ body,
 
 .axis-z {
   background: #60a5fa;
+}
+
+#control-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: 300px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  background: rgba(11, 16, 32, 0.82);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  scrollbar-width: thin;
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.panel-title small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+#viewer-status {
+  margin: 10px 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #bae6fd;
+  font-variant-numeric: tabular-nums;
+}
+
+#control-panel section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+#control-panel h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #cbd5e1;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+#control-panel button,
+#control-panel select {
+  padding: 5px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f5;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+#control-panel button:hover,
+#control-panel select:hover {
+  background: rgba(51, 65, 85, 0.95);
+}
+
+#control-panel button.active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.18);
+  color: #e0f2fe;
+}
+
+.wide-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.hint {
+  margin: 0 0 8px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 92px 1fr 62px;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0;
+}
+
+.slider-row input[type="range"] {
+  width: 100%;
+  accent-color: #38bdf8;
+}
+
+.slider-row output {
+  text-align: right;
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+}
+
+.check-row,
+.select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.select-row select {
+  margin-left: auto;
+}
+
+#control-panel details {
+  margin: 4px 0;
+}
+
+#control-panel summary {
+  padding: 4px 0;
+  cursor: pointer;
+  color: #e2e8f5;
 }
 
 .boot {
