@@ -12,6 +12,7 @@
  * consumed directly by `mix()`.
  */
 
+import type { Quat } from "../math/quat";
 import { vec3Cross, vec3Length, type Vec3 } from "../math/vec3";
 import {
   maxThrust as configMaxThrust,
@@ -233,17 +234,26 @@ export function rateStep(
 }
 
 /**
- * One full cascade step: position -> attitude -> rate. The returned wrench is
- * exactly the `Wrench` accepted by `mix()`. All state (both PID memories) is
- * returned explicitly; nothing is hidden in the params or the functions.
+ * One full cascade step with diagnostics. The returned wrench is exactly the
+ * `Wrench` accepted by `mix()`. All state (both PID memories) is returned
+ * explicitly; nothing is hidden in the params or the functions. The extra
+ * fields expose the internal targets for telemetry and visualisation without
+ * duplicating any control computation in the caller.
  */
-export function controllerStep(
+export interface ControllerStepDetailedResult extends ControllerStepResult {
+  readonly desiredOrientation: Quat;
+  readonly desiredRate: Vec3;
+  readonly desiredAcceleration: Vec3;
+  readonly desiredThrust: number;
+}
+
+export function controllerStepDetailed(
   controllerState: ControllerState,
   measurement: Measurement,
   setpoint: Setpoint,
   params: ControllerParams,
   dt: number,
-): ControllerStepResult {
+): ControllerStepDetailedResult {
   validateControllerParams(params);
   const outer = positionStep(
     controllerState.position,
@@ -272,5 +282,31 @@ export function controllerStep(
       inner.torque[1],
       inner.torque[2],
     ],
+    desiredOrientation: outer.desiredOrientation,
+    desiredRate,
+    desiredAcceleration: outer.acceleration,
+    desiredThrust: outer.thrust,
   };
+}
+
+/**
+ * One full cascade step: position -> attitude -> rate. This is the stable
+ * wrapper; it performs exactly the same computation as `controllerStepDetailed`
+ * and returns only the state and wrench. Existing callers are unaffected.
+ */
+export function controllerStep(
+  controllerState: ControllerState,
+  measurement: Measurement,
+  setpoint: Setpoint,
+  params: ControllerParams,
+  dt: number,
+): ControllerStepResult {
+  const { state, wrench } = controllerStepDetailed(
+    controllerState,
+    measurement,
+    setpoint,
+    params,
+    dt,
+  );
+  return { state, wrench };
 }
