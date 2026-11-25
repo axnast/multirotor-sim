@@ -27,6 +27,14 @@ export const PAYLOAD_MASS_20PCT: PayloadSpec = { mass: 0.3, position: [0, 0, 0] 
 /** Small off-centre mass: isolates trim from a large mass mismatch. */
 export const PAYLOAD_TRIM: PayloadSpec = { mass: 0.01, position: [0.3, 0, 0] };
 
+/**
+ * Baseline survival-envelope labels (M5 measurements, not controller targets):
+ * the largest case that survives the 120 s envelope (0.2% mass, 1 mm COM shift)
+ * and the named 20% / 2 cm stress case that does not. See docs/disturbances.md.
+ */
+export const PAYLOAD_SMALL: PayloadSpec = { mass: 0.003, position: [0.501, 0, 0] };
+export const PAYLOAD_LARGE_STRESS: PayloadSpec = PAYLOAD_2CM;
+
 function assertFinite(name: string, value: number): void {
   if (!Number.isFinite(value)) {
     throw new RangeError(`${name} must be a finite number`);

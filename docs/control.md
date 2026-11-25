@@ -96,7 +96,12 @@ integrate only if |error| < integralSeparation OR error·v <= 0
 
 `integralSeparation` is a **tunable parameter** of `PositionParams` (default
 `0.1 m`, validated as positive); M6 can tune it alongside the gains. This is an
-extension of conditional integration. Without it, the integral winds
+extension of conditional integration. **M5 measurement (limitation, not fixed):**
+a persistent steady error above 0.1 m with velocity pointing toward the target
+freezes the integral indefinitely, so a payload/battery-induced thrust deficit
+settles with residual error. Widening `integralSeparation` to 1e9 lets a centred
++20% payload recover; `ki × 10` or a larger `maxAccelZ` alone does not. See
+[disturbances.md](disturbances.md) for the measured numbers. Without it, the integral winds
 up during the slow approach (the attitude loop adds about 0.8 s of lag), giving
 12.7 % overshoot and more than 40 s settling even with `ki = 0.01`. With it,
 the same gains give 0.06 % overshoot and 15.2 s settling while retaining zero
