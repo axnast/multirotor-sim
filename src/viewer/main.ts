@@ -10,7 +10,6 @@ import * as THREE from "three";
 
 import { defaultControllerParams } from "../core/control/controller";
 import type { ControllerParams, Setpoint } from "../core/control/types";
-import { vec3Length, vec3Sub } from "../core/math/vec3";
 import { makeHex } from "../core/multirotor/config";
 import { threeToCore } from "./coords";
 import { createPlotsPanel } from "./plots/plotsPanel";
@@ -21,6 +20,7 @@ import { createSetpointMarker } from "./scene/setpointMarker";
 import { createViewerScene } from "./scene/scene";
 import { createTrail, type TrailVisual } from "./scene/trail";
 import { bumplessKiChange as rescaleIntegrals } from "./sim/bumpless";
+import { positionErrorM } from "./sim/metrics";
 import { MISSIONS } from "./sim/mission";
 import { ringToArray } from "./sim/ringBuffer";
 import {
@@ -216,21 +216,26 @@ viewer.renderer.setAnimationLoop((timeMs: number): void => {
   marker.update(state.setpoint, timeMs / 1000);
   cameraRig.update(drone.group.position, realDt, follow);
 
+  // Status line and HUD read the same state sample from the same throttled
+  // update, so their error values cannot be from different simulation frames.
   if (timeMs - lastStatusTime > 100) {
     lastStatusTime = timeMs;
-    const missionName = state.mission === null ? "Manual" : state.mission.mission.name;
-    const error = vec3Length(
-      vec3Sub(state.multirotor.body.position, state.setpoint.position),
+    const sample = state;
+    const missionName =
+      sample.mission === null ? "Manual" : sample.mission.mission.name;
+    const error = positionErrorM(
+      sample.multirotor.body.position,
+      sample.setpoint.position,
     );
     controls.setStatus(
-      `${missionName} · ${state.paused ? "paused" : `${state.speed}×`} · ` +
-        `t ${state.simTime.toFixed(1)} s · |e| ${error.toFixed(2)} m`,
+      `${missionName} · ${sample.paused ? "paused" : `${sample.speed}×`} · ` +
+        `t ${sample.simTime.toFixed(1)} s · |e| ${error.toFixed(2)} m`,
     );
+    hud.update(sample);
   }
 
   if (timeMs - lastPlotsTime > 33) {
     lastPlotsTime = timeMs;
-    hud.update(state);
     plots.update(state);
   }
 

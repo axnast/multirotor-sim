@@ -1,7 +1,7 @@
 /** Compact live HUD: time, speed, tracking error, tilt and saturation. */
 
 import { quatRotateVector } from "../../core/math/quat";
-import { vec3Length, vec3Sub } from "../../core/math/vec3";
+import { positionErrorM } from "../sim/metrics";
 import type { SimulationState } from "../sim/runner";
 
 export interface HudView {
@@ -39,8 +39,9 @@ export function createHud(parent: HTMLElement): HudView {
   return {
     element,
     update(state: SimulationState): void {
-      const positionError = vec3Length(
-        vec3Sub(state.multirotor.body.position, state.setpoint.position),
+      const positionError = positionErrorM(
+        state.multirotor.body.position,
+        state.setpoint.position,
       );
       const degrees = 180 / Math.PI;
       const currentTilt = quatRotateVector(
