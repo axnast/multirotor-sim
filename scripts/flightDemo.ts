@@ -59,7 +59,7 @@ interface Summary {
   readonly phase: string;
   readonly overshoot: number;
   readonly settlingTime: number;
-  readonly settledError: number;
+  readonly finalWindowMaxError: number;
 }
 
 function csvRow(values: readonly (number | boolean | string)[]): string {
@@ -106,7 +106,7 @@ function runPhase(
   let reached = false;
   let overshoot = 0;
   let lastOutside = 0;
-  let settledError = 0;
+  let finalWindowMaxError = 0;
 
   for (let step = 0; step < phase.steps; step++) {
     const command = controllerStep(
@@ -133,7 +133,9 @@ function runPhase(
       overshoot = Math.max(overshoot, vec3Dot(vec3Sub(position, phase.setpoint.position), direction));
     }
     if (deviation > 0.1) lastOutside = step;
-    if (step >= phase.steps - 3000) settledError = Math.max(settledError, deviation);
+    if (step >= phase.steps - 3000) {
+      finalWindowMaxError = Math.max(finalWindowMaxError, deviation);
+    }
 
     rows.push(csvRow([
       (globalStep + step) * DT,
@@ -160,7 +162,7 @@ function runPhase(
       phase: phase.name,
       overshoot,
       settlingTime: (lastOutside + 1) * DT,
-      settledError,
+      finalWindowMaxError,
     },
   };
 }
@@ -200,7 +202,7 @@ function main(): void {
   for (const summary of summaries) {
     console.log(
       `phase ${summary.phase.padEnd(8)} | overshoot ${summary.overshoot.toFixed(4)} m | ` +
-        `2% settling ${summary.settlingTime.toFixed(3)} s | tracking error ${summary.settledError.toFixed(4)} m`,
+        `2% settling ${summary.settlingTime.toFixed(3)} s | final-3s max error ${summary.finalWindowMaxError.toFixed(4)} m`,
     );
   }
   console.log(

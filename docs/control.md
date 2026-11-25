@@ -115,6 +115,10 @@ bandwidth ceiling. The rate loop crosses over near `3 rad/s` (phase margin
 zero far enough from the slow pole to avoid the ~4.6 s tail that `ki = 1.5`
 produced. The attitude loop is roughly 3× slower (1.2 rad/s), and the position
 loop roughly 2.4× slower again (`ω_n = 0.5 rad/s`, critically damped PD part).
+The position loop is overdamped because linear drag adds damping: with
+`c1 = 0.25 N/(m/s)` and `m = 1.5 kg`, the characteristic polynomial is
+`s² + 1.167 s + 0.25` with roots `−0.283` and `−0.884 rad/s`, which explains the
+~15 s 2 % settling time; this is the headroom M6 autotuning will use.
 All gains are plain parameters; M6 will tune them.
 
 ## Measured step responses
@@ -145,7 +149,7 @@ as in [conventions.md](conventions.md), byte-identical output is guaranteed only
 within one JavaScript engine. Reference run: **105 000 rows × 35 columns**,
 **43.74 MB**; overshoot 0 m.
 
-The printed "tracking error" is the **maximum error over the final 3 s of each
+The printed "final-3s max error" is the **maximum error over the final 3 s of each
 20 s leg** (`t = 17–20 s`, i.e. 1.8–4.8 s after the 2 % settling time). It is a
 tail maximum, not a steady-state error: the reference run gives **0.064–0.081 m**
 in that window, while the error at `t = 20 s` is only **0.023–0.032 m**. A single

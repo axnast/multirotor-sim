@@ -195,12 +195,12 @@ describe("cascade", () => {
       (time) => fixedSetpoint(corners[Math.min(3, Math.floor(time / 20))]!),
       80000,
     );
-    let settledError = 0;
+    let finalWindowMaxError = 0;
     for (let leg = 0; leg < 4; leg++) {
       const corner = corners[leg]!;
       for (let step = (leg * 20 + 17) * 1000; step < (leg + 1) * 20000; step++) {
-        settledError = Math.max(
-          settledError,
+        finalWindowMaxError = Math.max(
+          finalWindowMaxError,
           Math.hypot(
             stats.xHistory[step]! - corner[0],
             stats.yHistory[step]! - corner[1],
@@ -211,9 +211,9 @@ describe("cascade", () => {
     }
     // eslint-disable-next-line no-console
     console.log(
-      `[square] settled tracking error ${settledError.toFixed(4)} m, max tilt ${(stats.maxTilt * 180 / Math.PI).toFixed(3)} deg, saturations ${stats.mixerSaturations}`,
+      `[square] final-3s max error ${finalWindowMaxError.toFixed(4)} m, max tilt ${(stats.maxTilt * 180 / Math.PI).toFixed(3)} deg, saturations ${stats.mixerSaturations}`,
     );
-    expect(settledError).toBeLessThan(0.1);
+    expect(finalWindowMaxError).toBeLessThan(0.1);
     expect(stats.maxTilt).toBeLessThanOrEqual((30.1 * Math.PI) / 180);
     expect(stats.maxMotorSpeed).toBeLessThanOrEqual(1000);
     expect(stats.mixerSaturations).toBe(0);
