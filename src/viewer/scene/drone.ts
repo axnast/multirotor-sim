@@ -171,6 +171,21 @@ export function buildDroneModel(config: MultirotorConfig): DroneVisual {
     });
   }
 
+  // Permanent nose marker on the +x arm. It is a child of the airframe (not
+  // the axes group), so toggling the axis arrows never hides it.
+  const nose = new THREE.Mesh(
+    new THREE.ConeGeometry(radius * 0.12, radius * 0.34, 4),
+    new THREE.MeshStandardMaterial({
+      color: 0xfde68a,
+      emissive: 0x4a3200,
+      roughness: 0.5,
+    }),
+  );
+  nose.rotation.z = -Math.PI / 2; // cone +Y becomes body +x
+  nose.position.set(radius * 0.72, gearHeight + 0.03, 0);
+  nose.castShadow = true;
+  group.add(nose);
+
   const axes = buildAxes(radius, gearHeight + 0.035);
   group.add(axes);
 
