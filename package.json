@@ -19,7 +19,8 @@
     "preview": "vite preview",
     "demo": "tsx scripts/dropBox.ts",
     "demo:hover": "tsx scripts/hoverDemo.ts",
-    "demo:flight": "tsx scripts/flightDemo.ts"
+    "demo:flight": "tsx scripts/flightDemo.ts",
+    "demo:disturbance": "tsx scripts/disturbanceDemo.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
