@@ -13,6 +13,7 @@ import type { ControllerParams, Setpoint } from "../core/control/types";
 import { vec3Length, vec3Sub } from "../core/math/vec3";
 import { makeHex } from "../core/multirotor/config";
 import { threeToCore } from "./coords";
+import { createPlotsPanel } from "./plots/plotsPanel";
 import { createAxisLegend } from "./scene/axisLegend";
 import { createCameraRig } from "./scene/cameraRig";
 import { buildDroneModel, updateDrone } from "./scene/drone";
@@ -35,6 +36,7 @@ import {
   type SimulationPlant,
 } from "./sim/runner";
 import { createControls, type ControlsView } from "./ui/controls";
+import { createHud } from "./ui/hud";
 import {
   applyParamValue,
   isKiSlider,
@@ -71,6 +73,7 @@ let follow = false;
 let showAxes = true;
 let lastTime = performance.now();
 let lastStatusTime = 0;
+let lastPlotsTime = 0;
 
 const controls: ControlsView = createControls(app, params, {
   onMission(mission): void {
@@ -161,6 +164,9 @@ const controls: ControlsView = createControls(app, params, {
   },
 });
 
+const hud = createHud(app);
+const plots = createPlotsPanel(app, config.motors.length);
+
 controls.setMission(MISSIONS.hover.id);
 controls.setPaused(false);
 controls.setSpeed(1);
@@ -220,6 +226,12 @@ viewer.renderer.setAnimationLoop((timeMs: number): void => {
       `${missionName} · ${state.paused ? "paused" : `${state.speed}×`} · ` +
         `t ${state.simTime.toFixed(1)} s · |e| ${error.toFixed(2)} m`,
     );
+  }
+
+  if (timeMs - lastPlotsTime > 33) {
+    lastPlotsTime = timeMs;
+    hud.update(state);
+    plots.update(state);
   }
 
   viewer.renderer.render(viewer.scene, viewer.camera);
