@@ -92,3 +92,18 @@ Motors (`T = kT·ω²`, first-order lag and clamping), quad/hex/octo layouts, th
 minimum-norm allocation mixer, body-frame air-relative drag with an `Environment`
 wind argument, and opt-in single-point ground contact. The Milestone 1 rigid-body
 core is unchanged; details and limitations are in [multirotor.md](multirotor.md).
+
+## Viewer (Three.js) mapping
+
+The browser viewer maps core Z-up coordinates to Three.js Y-up in exactly one
+helper, `src/viewer/coords.ts`:
+
+```
+p_three = (x, z, -y)_core
+q_three = [x, z, -y, w]_core   (Three stores x,y,z,w)
+```
+
+This is `R_x(-90°)` with determinant +1, so handedness is preserved: body `+x`
+is Three `+x`, body `+y` is Three `-z`, body `+z` is Three `+y`. The conversion
+is a view detail only; the physics frame conventions above are unchanged. See
+[viewer.md](viewer.md) for the tests and rationale.

@@ -16,6 +16,12 @@ Source of truth:
 | Outer position loop | `src/core/control/position.ts` |
 | Defaults, cascade, inner rate loop | `src/core/control/controller.ts` |
 | Flight trace | `scripts/flightDemo.ts` |
+| Viewer runner and diagnostics | `src/viewer/sim/`, `src/viewer/coords.ts` |
+
+`controllerStepDetailed` is an additive diagnostics wrapper around the same
+cascade: it returns the identical state and wrench as `controllerStep` plus the
+desired orientation, body rate, acceleration and thrust for viewer telemetry.
+`controllerStep` delegates to it and its output is unchanged.
 
 See [multirotor.md](multirotor.md) for the plant and [conventions.md](conventions.md)
 for frames and signs.
