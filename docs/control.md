@@ -85,10 +85,12 @@ already measured, so filtering a differentiated position would only add phase
 lag. Optional `v_sp` is a feedforward; the integral is separated:
 
 ```
-integrate only if |error| < 0.1 m OR error·v <= 0
+integrate only if |error| < integralSeparation OR error·v <= 0
 ```
 
-This is an extension of conditional integration. Without it, the integral winds
+`integralSeparation` is a **tunable parameter** of `PositionParams` (default
+`0.1 m`, validated as positive); M6 can tune it alongside the gains. This is an
+extension of conditional integration. Without it, the integral winds
 up during the slow approach (the attitude loop adds about 0.8 s of lag), giving
 12.7 % overshoot and more than 40 s settling even with `ki = 0.01`. With it,
 the same gains give 0.06 % overshoot and 15.2 s settling while retaining zero
@@ -103,7 +105,7 @@ caps horizontal acceleration at `g·tan(30°) = 5.66 m/s²`.
 
 | Loop | Gains | Limits |
 |---|---|---|
-| Position | `kp = 0.25 s⁻²`, `ki = 0.01 s⁻³`, `kd = 1.0 s⁻¹` | `a_xy ≤ 6`, `a_z ≤ 3 m/s²`; tilt 30°; `T ∈ [1.4715, 48] N` |
+| Position | `kp = 0.25 s⁻²`, `ki = 0.01 s⁻³`, `kd = 1.0 s⁻¹`, `integralSeparation = 0.1 m` | `a_xy ≤ 6`, `a_z ≤ 3 m/s²`; tilt 30°; `T ∈ [1.4715, 48] N` |
 | Attitude | tilt `1.2 s⁻¹`, yaw `0.8 s⁻¹` | tilt 2.5, yaw 1.2, total 3.0 rad/s |
 | Rate | `kp = 3.0 s⁻¹`, `ki = 0.5 s⁻²`, `kd = 0.02` | `[20, 20, 1.8835] rad/s²`; derivative cutoff 50 rad/s |
 
@@ -141,7 +143,14 @@ display Euler angles, angular rates, commanded wrench, saturation/contact
 flags, and all six motor speeds. A printed SHA-256 makes two runs comparable;
 as in [conventions.md](conventions.md), byte-identical output is guaranteed only
 within one JavaScript engine. Reference run: **105 000 rows × 35 columns**,
-**43.74 MB**; per-leg tracking error **0.064–0.081 m**, overshoot 0 m.
+**43.74 MB**; overshoot 0 m.
+
+The printed "tracking error" is the **maximum error over the final 3 s of each
+20 s leg** (`t = 17–20 s`, i.e. 1.8–4.8 s after the 2 % settling time). It is a
+tail maximum, not a steady-state error: the reference run gives **0.064–0.081 m**
+in that window, while the error at `t = 20 s` is only **0.023–0.032 m**. A single
+5 m step measured at `t = 25 s` is **0.0035 m**, matching the steady-state error
+quoted above; the square pattern simply uses a shorter observation window.
 
 ## Limitations
 
