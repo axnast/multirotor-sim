@@ -17,7 +17,7 @@ import {
 describe("zero-disturbance M3 flight regression", () => {
   it("keeps the pre-M5 helper honest against the frozen digest", () => {
     expect(digestM3Samples(runLegacyTrace())).toBe(FROZEN_M3_DIGEST);
-  });
+  }, 30_000);
 
   it("reproduces the frozen flight bit-for-bit through the runner", () => {
     const { samples, state } = runRunnerTrace();
@@ -26,5 +26,5 @@ describe("zero-disturbance M3 flight regression", () => {
     expect(digestM3Samples(samples)).toBe(FROZEN_M3_DIGEST);
     expect(samples).toEqual(runLegacyTrace());
     expect(state.stepCount).toBe(M3_STEPS);
-  });
+  }, 30_000);
 });

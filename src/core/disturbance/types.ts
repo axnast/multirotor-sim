@@ -10,6 +10,7 @@
  * boundary are added in later commits.
  */
 
+import type { Measurement } from "../control/types";
 import type { Vec3 } from "../math/vec3";
 
 /**
@@ -65,4 +66,36 @@ export interface WindStepResult {
   readonly state: WindState;
   /** Total wind velocity to pass to `Environment.windVelocity` (m/s). */
   readonly wind: Vec3;
+}
+
+/**
+ * Placeholder sensor error model for the measurement given to the controller.
+ * All sigmas are 1-standard-deviation values; sample-and-hold sensor rates are
+ * out of scope. These are illustrative numbers, not measured hardware specs.
+ */
+export interface SensorParams {
+  readonly enabled: boolean;
+  /** GPS-RTK-like position sigma (m). */
+  readonly positionSigma: number;
+  /** Velocity sigma (m/s). */
+  readonly velocitySigma: number;
+  /** Per-axis small-rotation sigma (rad). */
+  readonly attitudeSigmaRad: number;
+  /** Gyro white noise sigma (rad/s). */
+  readonly gyroWhiteSigma: number;
+  /** Gyro bias random-walk coefficient (rad/s per sqrt(s)). */
+  readonly gyroBiasWalkSigma: number;
+}
+
+/** Sensor noise memory: the PRNG stream and the integrated gyro bias. */
+export interface SensorState {
+  readonly prng: PrngState;
+  /** Body-frame gyro bias (rad/s), a random walk. */
+  readonly gyroBias: Vec3;
+}
+
+export interface NoiseStepResult {
+  readonly state: SensorState;
+  /** Corrupted copy of the truth; the truth itself is never changed. */
+  readonly measurement: Measurement;
 }
