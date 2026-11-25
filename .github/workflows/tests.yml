@@ -20,3 +20,6 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Build viewer (one Node version)
+        if: ${{ matrix.node-version == 22 }}
+        run: npm run build
