@@ -64,6 +64,15 @@ export interface PositionParams {
    * during a long approach while retaining zero steady-state error.
    */
   readonly integralSeparation: number;
+  /**
+   * Stall dwell (s) before a persistent position error releases the integral.
+   * `0` disables the release entirely and reproduces the M3 gate bit-for-bit.
+   */
+  readonly integralDwell: number;
+  /** Integral accumulation multiplier while released (1 = no boost). */
+  readonly integralTrimGain: number;
+  /** Minimum time (s) since the last setpoint change before a release arms. */
+  readonly integralReleaseGuard: number;
   readonly maxAccelXY: number;
   readonly maxAccelZ: number;
   readonly maxTilt: number;
@@ -97,8 +106,31 @@ export interface ControllerParams {
 
 export type AxisPidState = readonly [PidState, PidState, PidState];
 
+/**
+ * Position-loop PID memory. Extends `PidState` with the release bookkeeping;
+ * the rate loop keeps the plain `PidState`. All fields are plain data.
+ */
+export interface PositionPidState extends PidState {
+  /** First-order filtered signed velocity (m/s), noise-immune rest detector. */
+  readonly vf: number;
+  /** Seconds the filtered speed has been below the release threshold. */
+  readonly stallTime: number;
+  /** Hysteresis state: keep integrating until the error is inside the band. */
+  readonly released: boolean;
+  /** Last setpoint component, to detect a new command. */
+  readonly lastSetpoint: number;
+  /** Seconds since the last setpoint component change. */
+  readonly setpointAge: number;
+}
+
+export type PositionAxisState = readonly [
+  PositionPidState,
+  PositionPidState,
+  PositionPidState,
+];
+
 export interface ControllerState {
-  readonly position: AxisPidState;
+  readonly position: PositionAxisState;
   readonly rate: AxisPidState;
 }
 

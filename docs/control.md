@@ -96,17 +96,51 @@ integrate only if |error| < integralSeparation OR error·v <= 0
 
 `integralSeparation` is a **tunable parameter** of `PositionParams` (default
 `0.1 m`, validated as positive); M6 can tune it alongside the gains. This is an
-extension of conditional integration. **M5 measurement (limitation, not fixed):**
-a persistent steady error above 0.1 m with velocity pointing toward the target
-freezes the integral indefinitely, so a payload/battery-induced thrust deficit
-settles with residual error. Widening `integralSeparation` to 1e9 lets a centred
-+20% payload recover; `ki × 10` or a larger `maxAccelZ` alone does not. See
-[disturbances.md](disturbances.md) for the measured numbers. Without it, the integral winds
-up during the slow approach (the attitude loop adds about 0.8 s of lag), giving
-12.7 % overshoot and more than 40 s settling even with `ki = 0.01`. With it,
-the same gains give 0.06 % overshoot and 15.2 s settling while retaining zero
-steady-state error. Output saturation uses the usual rule: do not integrate
-further in the direction that increases saturation.
+extension of conditional integration. Without it, the integral winds up during
+the slow approach (the attitude loop adds about 0.8 s of lag), giving 12.7 %
+overshoot and more than 40 s settling even with `ki = 0.01`. With it, the same
+gains give 0.06 % overshoot and 15.2 s settling while retaining zero steady-state
+error. Output saturation uses the usual rule: do not integrate further in the
+direction that increases saturation.
+
+### Persistent-error release
+
+Measured in M5: the separation gate has an absorbing equilibrium. With a
+constant wind or a mass deficit, the residual velocity is small but points
+toward the setpoint, so `error·v <= 0` stays false and the integral is held
+forever (3.67 m wind offset; 4.99 m residual for +20 % mass). Widening
+`integralSeparation` to 1e9 fixes that but reintroduces the step overshoot.
+
+The gate is therefore augmented with a **release** for persistent errors:
+
+```
+vf        = vf + dt/(τ+dt) · (v - vf)      τ = 0.3 s, signed (noise-immune)
+stallTime = (|vf| < 0.06 m/s && |e| >= sep) ? stallTime + dt : 0
+released  = stallTime >= integralDwell, latched until |e| < sep or saturation
+integrate iff !pushFurther && (|e| < sep || e·v <= 0 || released)
+integral contribution is multiplied by integralTrimGain while released
+```
+
+A release may only arm after the setpoint has been unchanged for
+`integralReleaseGuard` seconds; a setpoint change clears the latch. Defaults:
+`integralDwell = 5 s`, `integralTrimGain = 3`, `integralReleaseGuard = 2 s`.
+`integralDwell = 0` disables the release entirely and is **bit-identical to the
+M3 gate** — the frozen flight digest `8ed20e2e…` is unchanged. The three
+settings are plain data and have viewer sliders; the 0.06 m/s rest threshold and
+0.3 s filter are documented constants.
+
+Measured effect: the 5 m step, square, takeoff, 500 m recovery and 45 s flight
+digest are unchanged; a constant 5 m/s wind trims from 3.67 m to <0.05 m by
+~90 s (with sensor noise); centred +20 % mass recovers from 4.99 m to <0.1 m;
+the centred 10 g payload recovers from 0.202 m. The release does **not** improve
+gusty scenarios — their residual error is driven by the wind process, not by the
+frozen integrator (see [disturbances.md](disturbances.md)).
+
+**M6 caution:** the release makes the tuning cost surface **discontinuous** —
+crossing `integralDwell` switches a different integration law on. Treat
+`integralDwell` and `integralTrimGain` as fixed for comparisons, or tune them
+deliberately with a fine sweep and report both sides of the threshold; do not
+feed them to an optimiser that assumes a smooth response.
 
 Thrust is clamped to `[0.1·mg, 0.8·ΣkTω_max²]` — `[1.4715, 48] N` for the hex —
 leaving margin for torque authority. The desired tilt is clamped to 30°, which

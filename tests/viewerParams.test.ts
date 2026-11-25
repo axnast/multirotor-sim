@@ -20,8 +20,11 @@ describe("viewer gain slider specs", () => {
   it("contains every documented control and no duplicates", () => {
     const ids = PARAM_SLIDERS.map((spec) => spec.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBe(18);
+    expect(ids.length).toBe(21);
     expect(ids).toContain("position.integralSeparation");
+    expect(ids).toContain("position.integralDwell");
+    expect(ids).toContain("position.integralTrimGain");
+    expect(ids).toContain("position.integralReleaseGuard");
     expect(ids).toContain("rate.maxAngularAccelerationZ");
   });
 

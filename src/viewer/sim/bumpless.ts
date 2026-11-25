@@ -9,17 +9,19 @@
  */
 
 import type {
-  AxisPidState,
   ControllerParams,
   ControllerState,
   PidState,
 } from "../../core/control/types";
 
-function rescaleAxis(state: PidState, factor: number): PidState {
+function rescaleAxis<T extends PidState>(state: T, factor: number): T {
   return { ...state, integral: state.integral * factor };
 }
 
-function rescaleAxes(axes: AxisPidState, factor: number): AxisPidState {
+function rescaleAxes<T extends PidState>(
+  axes: readonly [T, T, T],
+  factor: number,
+): [T, T, T] {
   return [
     rescaleAxis(axes[0], factor),
     rescaleAxis(axes[1], factor),

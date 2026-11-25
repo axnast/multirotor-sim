@@ -25,8 +25,13 @@ function axis(integral: number): PidState {
 }
 
 function stateWithIntegral(integral: number): ControllerState {
+  const fresh = initialControllerState();
   return {
-    position: [axis(integral), axis(integral), axis(integral)],
+    position: [
+      { ...fresh.position[0]!, integral },
+      { ...fresh.position[1]!, integral },
+      { ...fresh.position[2]!, integral },
+    ],
     rate: [axis(integral), axis(integral), axis(integral)],
   };
 }

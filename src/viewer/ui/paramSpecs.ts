@@ -16,6 +16,9 @@ export type ParamKey =
   | "position.ki"
   | "position.kd"
   | "position.integralSeparation"
+  | "position.integralDwell"
+  | "position.integralTrimGain"
+  | "position.integralReleaseGuard"
   | "position.maxAccelXY"
   | "position.maxAccelZ"
   | "position.maxTilt"
@@ -73,6 +76,24 @@ export const PARAM_SLIDERS: readonly ParamSlider[] = [
     min: 0.02, max: 1, step: 0.01,
     get: (p) => p.position.integralSeparation,
     set: (p, v) => ({ ...p, position: { ...p.position, integralSeparation: v } }),
+  },
+  {
+    id: "position.integralDwell", group: "position", label: "I dwell", unit: "s",
+    min: 0, max: 12, step: 0.1,
+    get: (p) => p.position.integralDwell,
+    set: (p, v) => ({ ...p, position: { ...p.position, integralDwell: v } }),
+  },
+  {
+    id: "position.integralTrimGain", group: "position", label: "I trim gain", unit: "×",
+    min: 1, max: 5, step: 0.5,
+    get: (p) => p.position.integralTrimGain,
+    set: (p, v) => ({ ...p, position: { ...p.position, integralTrimGain: v } }),
+  },
+  {
+    id: "position.integralReleaseGuard", group: "position", label: "I release guard", unit: "s",
+    min: 0, max: 10, step: 0.5,
+    get: (p) => p.position.integralReleaseGuard,
+    set: (p, v) => ({ ...p, position: { ...p.position, integralReleaseGuard: v } }),
   },
   {
     id: "position.maxAccelXY", group: "position", label: "max accel XY", unit: "m/s²",

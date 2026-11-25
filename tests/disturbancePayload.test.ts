@@ -104,20 +104,19 @@ describe("payload shift", () => {
     expect(config.motors[0]!.position[0]).toBe(0.25);
   });
 
-  it("baseline survival envelope: only the smallest mass/offset cases survive (M6 target)", () => {
-    // BASELINE LIMITATION, not correct behaviour. The current controller
-    // rejects payloads only below about 0.2% of mass and 1 mm of COM shift.
-    // Every requested grid case below fails: either the integrator freezes
-    // (integral separation, |error| > 0.1 m) or the vehicle contacts the
-    // ground. Flip this expectation when the controller improves; the
-    // controller itself was deliberately NOT changed in M5.
+  it("survival envelope with the integral release: all offsets up to 1 cm survive below 20% mass", () => {
+    // Re-pinned after the fix(control) commit. The persistent-error release
+    // removes the frozen-integral equilibrium, so 1–10% payloads at 2–10 mm
+    // COM shift now survive. The 20 mm column still contacts the ground during
+    // the transient, and 20% mass contacts at every offset; both are M6
+    // targets for the inner loop and are not claimed as fixed here.
     const masses = [0.01, 0.02, 0.05, 0.10, 0.20]; // fractions of 1.5 kg
     const offsets = [0.002, 0.005, 0.01, 0.02]; // metres of COM shift
     const expected = [
-      [false, false, false, false],
-      [false, false, false, false],
-      [false, false, false, false],
-      [false, false, false, false],
+      [true, true, true, false],
+      [true, true, true, false],
+      [true, true, true, false],
+      [true, true, true, false],
       [false, false, false, false],
     ] as const;
     const measured = masses.map((fraction) =>
@@ -146,10 +145,10 @@ describe("payload shift", () => {
   }, 60_000);
 
   it("baseline limitation: integral separation freezes the position integral (M6 target)", () => {
-    // Verified by scratch experiments (not committed): with centred +20%
-    // mass, the integral stops at 71.454 m*s, exactly the value that balances
-    // weight at e = 5 m, because |error| > 0.1 m and velocity is positive.
-    // With integralSeparation = 1e9 it grows past 150 m*s and recovers.
+    // With the M3 gate (`integralDwell = 0`) the centred +20% mass case froze
+    // at an integral of 71.454 m*s. The release now grows it past 190 m*s and
+    // recovers the altitude. This test pins the current behaviour; the
+    // separation-only variant is still available by setting dwell to 0.
     const base = plant().params;
     const frozen = envelope(0.3, 0, base);
     const open = envelope(0.3, 0, {

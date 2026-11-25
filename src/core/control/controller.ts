@@ -31,6 +31,7 @@ import type {
   Measurement,
   PidConfig,
   PidResult,
+  PositionPidState,
   Setpoint,
 } from "./types";
 
@@ -107,6 +108,9 @@ export function defaultControllerParams(config: MultirotorConfig): ControllerPar
     position: {
       gains: { kp: 0.25, ki: 0.01, kd: 1.0 },
       integralSeparation: 0.1,
+      integralDwell: 5,
+      integralTrimGain: 3,
+      integralReleaseGuard: 2,
       maxAccelXY: 6,
       maxAccelZ: 3,
       maxTilt: Math.PI / 6,
@@ -138,6 +142,15 @@ export function validateControllerParams(params: ControllerParams): void {
   assertFinite("position.ki", params.position.gains.ki);
   assertFinite("position.kd", params.position.gains.kd);
   assertPositive("integralSeparation", params.position.integralSeparation);
+  assertFinite("integralDwell", params.position.integralDwell);
+  if (params.position.integralDwell < 0) {
+    throw new RangeError("integralDwell must be non-negative");
+  }
+  assertPositive("integralTrimGain", params.position.integralTrimGain);
+  assertFinite("integralReleaseGuard", params.position.integralReleaseGuard);
+  if (params.position.integralReleaseGuard < 0) {
+    throw new RangeError("integralReleaseGuard must be non-negative");
+  }
   assertPositive("maxAccelXY", params.position.maxAccelXY);
   assertPositive("maxAccelZ", params.position.maxAccelZ);
   assertPositive("maxTilt", params.position.maxTilt);
@@ -162,10 +175,22 @@ export function validateControllerParams(params: ControllerParams): void {
   }
 }
 
+/** A fresh position PID state; the age guard also covers the first seconds. */
+function emptyPositionState(): PositionPidState {
+  return {
+    ...emptyPidState(),
+    vf: 0,
+    stallTime: 0,
+    released: false,
+    lastSetpoint: 0,
+    setpointAge: 0,
+  };
+}
+
 /** A fresh, fully zeroed controller state. */
 export function initialControllerState(): ControllerState {
   return {
-    position: [emptyPidState(), emptyPidState(), emptyPidState()],
+    position: [emptyPositionState(), emptyPositionState(), emptyPositionState()],
     rate: [emptyPidState(), emptyPidState(), emptyPidState()],
   };
 }
