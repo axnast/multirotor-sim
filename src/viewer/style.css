@@ -21,6 +21,55 @@ body,
 
 #app {
   position: relative;
+  background: #0b1020;
+}
+
+#app > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#axis-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  background: rgba(11, 16, 32, 0.72);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  line-height: 1.7;
+  pointer-events: none;
+  user-select: none;
+}
+
+.axis-legend-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.axis-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.axis-x {
+  background: #ff5a5a;
+}
+
+.axis-y {
+  background: #4ade80;
+}
+
+.axis-z {
+  background: #60a5fa;
 }
 
 .boot {

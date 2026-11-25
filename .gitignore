@@ -5,6 +5,7 @@ coverage/
 *.tsbuildinfo
 out/
 .DS_Store
+desktop.ini
 .idea/
 .vscode/
 *.log
