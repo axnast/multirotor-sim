@@ -1,9 +1,11 @@
 # Disturbances (Milestone 5)
 
-All disturbance models are deterministic, seeded and plain data. No controller
-or airframe physics was changed in M5. The controller and mixer always receive
-the **nominal** config and params; the plant alone receives the **true** config
-(mass, COM, inertia, voltage-limited motor ceilings) and the wind vector.
+All disturbance models are deterministic, seeded and plain data. The controller
+and mixer always receive the **nominal** config and params; the plant alone
+receives the **true** config (mass, COM, inertia, voltage-limited motor ceilings)
+and the wind vector. The controller fix documented in
+[control.md](control.md) removes the frozen-integral equilibrium without
+changing the M3 flight profile.
 
 ## Models and defaults
 
@@ -17,58 +19,90 @@ the **nominal** config and params; the plant alone receives the **true** config
 | Scenarios | `scenario.ts` | calm 0/0, light 2/0.5, moderate 5/1.5, gusty 5/3, strong 8/2.5 m/s (mean/gust σ, +x) |
 
 Wind and sensors use **independent PRNG streams** derived from distinct
-splitmix32 offsets of the scenario seed (`seeds.ts`); toggling one model does
-not shift the other's samples. With every model disabled, the runner passes the
-same objects to the same core calls, so the 45 s M3 flight digest is unchanged
-(`8ed20e2e…` from pre-M5 HEAD `15cd29b`).
+splitmix32 offsets of the scenario seed (`seeds.ts`). With every model disabled,
+the runner passes the same objects to the same core calls, so the 45 s M3 flight
+digest is unchanged (`8ed20e2e…` from pre-M5 HEAD `15cd29b`). The integral
+release never fires on that flight profile, so the digest remains unchanged
+after the fix commit (`525c80f`).
 
 The battery is a placeholder, not a chemistry model. The realistic pack never
 saturates a 4:1 thrust-to-weight hex in hover (margin 2.57 at SoC 0). The named
 **stress pack** (`V_oc/V_nom = 0.45 + 0.55·SoC`) is deliberately non-physical and
 exists only to make saturation observable in tests/demo/viewer; at SoC 0.15 its
-hover margin is 0.751 and plant saturation grows while the nominal mixer stays
-saturated=false. Terminal voltage solves `V² - V_oc V + P R/η = 0` exactly with
-`P = Σ kQ ω³`. SoC drains as the integrated current divided by capacity.
+hover margin is 0.751. Terminal voltage solves `V² - V_oc V + P R/η = 0`
+exactly with `P = Σ kQ ω³`.
 
-## Current controller limitations (measured, not fixed in M5)
+## Constant wind: noise off vs noise on
 
-The controller was deliberately not changed. The following are baseline
-observations and M6 targets, not correct behaviour:
+True position error, 5 fixed seeds (1–5), 120 s runs, mean over the final 10 s
+(range across seeds in brackets). Three controller variants:
 
-- **Integral separation freezes steady errors above 0.1 m.** For centred +20%
-  mass, the required extra acceleration is `a_z ≈ 0.2·g = 1.96 m/s²`, which at
-  `ki = 0.01` needs an integral of **≈196 m·s**. Starting from 5 m, the vehicle
-  reaches the ground long before then (integral only 71.454 m·s at touchdown).
-  The question "why does it not lift off later on the ground if the integral
-  should exceed 196 m·s after ~40 s at e = 5 m?" is answered by the integration
-  condition: at touchdown `error = +5 m` and velocity is zero or positive, so
-  `neither |error| < 0.1 nor error·v <= 0` holds and the integral is held. It
-  stays frozen at 71.454 m·s for the remaining 100 s. Setting
-  `integralSeparation = 1e9` lets it grow past 195 m·s and the vehicle climbs
-  back to ≈4.96 m by 120 s; `ki × 10` alone settles at 2.60 m (also frozen);
-  widening `maxAccelZ` alone changes nothing. In words: **integral separation
-  is the switch that changes the outcome; ki or the acceleration limit do not.**
-- **Small mismatches converge slowly or not at all.** A centred +1% mass gives
-  a residual z error of 0.202 m that is never re-entered within 600 s
-  (integral stuck at 1.495 m·s). With `integralSeparation = 1e9`, the band is
-  re-entered at t = 30.488 s and final z = 5.000 m.
-- **Constant wind does not return to the setpoint either.** A steady 5 m/s +x
-  wind produces the drag-predicted tilt `atan(1.75/14.715) = 6.782°` but a
-  ~3.67 m steady x offset, for the same integral-separation reason. The earlier
-  assumption that the position integrator removes wind offsets is **false**
-  with the shipped default.
-- **The inner rate loop is soft for large COM offsets.** For the 2 cm offset
-  case the disturbance torque is ≈0.35 N·m; with P-only trim the offset would
-  be `α_d/(kp_rate·tiltGain)`. The measured rate-integral torque ratio reaches
-  0.5 at 3.6 s and 0.9 at 9.9 s, with a peak attitude excursion of **109°**
-  (mostly during the initial mass drop) before the level trim settles. At
-  0.01 kg / 0.3 m (d = 2 mm) the steady attitude is level (<1°) with a 7.9 rad/s
-  motor-speed spread, but the lateral position remains at −0.19 m.
-- **Survival envelope:** with the default controller, only ≤0.2% mass with
-  ≤1 mm COM offset survives the 120 s / 0.1 m envelope; +20% / 2 cm lands.
-  These are recorded as baseline limitations in
-  `tests/disturbancePayload.test.ts`, with expectations that can be flipped
-  when the controller improves.
+- **M3 gate**: `integralDwell = 0` (the pre-fix gate, bit-identical to M3).
+- **default**: the release is active (`integralDwell = 5 s`, `integralTrimGain = 3`).
+- **gate off**: `integralSeparation = 1e9`, plain conditional integration,
+  **reference only** — it overshoots a 5 m step by 12.7 % and is not the M3 baseline.
 
-No tolerance was loosened and no controller gain was retuned to hide these
-results. See [control.md](control.md) for the loop equations.
+| Constant 5 m/s +x | M3 gate | default | gate off |
+|---|---|---|---|
+| Sensors **off**, 60 s | 3.681 | 0.0617 | 0.4699 |
+| Sensors **off**, 120 s | 3.680 | **0.0028** | 0.0173 |
+| Sensors **on**, 60 s | 2.396 [2.392–2.404] | 1.075 [1.067–1.083] | 0.469 [0.466–0.472] |
+| Sensors **on**, 120 s | 1.045 [1.040–1.049] | **0.0109** [0.006–0.013] | 0.0154 [0.014–0.018] |
+
+Noise changes the M3 gate qualitatively: the perturbed equilibrium no longer
+holds the integral (Ix ≈ −95 rather than −25.8) and the offset decays slowly,
+whereas noise-off is permanently frozen at 3.68 m. The release reaches <0.05 m
+by 120 s with noise; at 60 s the noisy residual is still 1.075 m, so the test
+uses 120 s. The steady tilt is the drag prediction
+`atan(1.75/(1.5·9.81)) = 6.782°` in all cases.
+
+## Named scenarios (5 seeds, 120 s)
+
+True-position RMS (m), mean [min, max] across seeds 1–5:
+
+| Scenario | Window | M3 gate | default |
+|---|---|---|---|
+| light | 20–60 s | 0.919 [0.786, 0.996] | 0.863 [0.651, 0.996] |
+| light | 90–120 s | 0.418 [0.313, 0.553] | 0.369 [0.299, 0.493] |
+| moderate | 20–60 s | 2.956 [2.295, 3.421] | 2.957 [2.298, 3.421] |
+| moderate | 90–120 s | 1.531 [1.098, 2.160] | 1.529 [1.096, 2.162] |
+| gusty | 20–60 s | 4.043 [2.484, 5.427] | 4.044 [2.486, 5.427] |
+| gusty | 90–120 s | 2.859 [1.917, 4.052] | 2.859 [1.916, 4.055] |
+| strong | 20–60 s | 5.895 [4.310, 7.072] | 5.896 [4.316, 7.072] |
+| strong | 90–120 s | 3.201 [2.147, 4.840] | 3.199 [2.147, 4.840] |
+
+Noise on/off changes these RMS values by <0.002 m. The release makes essentially
+no difference to moderate/gusty/strong: their residual is driven by the wind
+process (OU with Tc = 2 s gives roughly five independent samples per 10 s
+window, so single-seed numbers have wide spread), **not** by the frozen
+integrator. A mean-velocity trigger was also evaluated and left 2.5–3.6 m under
+gusts; gust rejection is an M6 target, not a claimed M5 fix.
+
+## Payload envelope
+
+Survive = no ground contact in 120 s **and** true position error <0.1 m over the
+last 10 s. Rows = payload mass as a fraction of 1.5 kg; columns = COM offset.
+Re-pinned after the controller fix:
+
+| mass % \ offset | 2 mm | 5 mm | 10 mm | 20 mm |
+|---|---|---|---|---|
+| 1 % | yes | yes | yes | no (contact) |
+| 2 % | yes | yes | yes | no (contact) |
+| 5 % | yes | yes | yes | no (contact) |
+| 10 % | yes | yes | yes | no (contact) |
+| 20 % | no (contact) | no (contact) | no (contact) | no (contact) |
+
+`PAYLOAD_SMALL` (0.003 kg, 1 mm COM) survives. `PAYLOAD_LARGE_STRESS` (0.3 kg,
+2 cm COM) now **recovers** from 4.99 m to 0.003 m (integral ≈196 m·s) but still
+contacts the ground for ~7.7k steps during the transient. The 20 mm column and
+all 20 % cases remain M6 targets for the inner loop; no tolerance was loosened.
+
+Earlier baseline measurements kept for context (M3 gate): centred +20 % mass
+froze at an integral of 71.454 m·s on the ground; centred 1 % mass froze at
+0.202 m error (integral 1.495 m·s); constant wind froze at 3.68 m. The 2 cm
+offset case has a disturbance torque ≈0.35 N·m, rate-integral torque reaching
+50 % at 3.6 s and 90 % at 9.9 s, with a 109° peak attitude excursion during the
+initial mass drop.
+
+See [control.md](control.md) for the release equations, the M6 warning about the
+discontinuous tuning cost surface, and the unchanged M3 numbers.

@@ -20,6 +20,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Slow seeded suites (one Node version)
+        if: ${{ matrix.node-version == 22 }}
+        run: npm run test:slow
       - name: Build viewer (one Node version)
         if: ${{ matrix.node-version == 22 }}
         run: npm run build

@@ -28,9 +28,11 @@ export const PAYLOAD_MASS_20PCT: PayloadSpec = { mass: 0.3, position: [0, 0, 0] 
 export const PAYLOAD_TRIM: PayloadSpec = { mass: 0.01, position: [0.3, 0, 0] };
 
 /**
- * Baseline survival-envelope labels (M5 measurements, not controller targets):
- * the largest case that survives the 120 s envelope (0.2% mass, 1 mm COM shift)
- * and the named 20% / 2 cm stress case that does not. See docs/disturbances.md.
+ * Named envelope cases. With the integral release, `PAYLOAD_SMALL` (0.2% mass,
+ * 1 mm COM shift) survives the 120 s envelope; `PAYLOAD_LARGE_STRESS` (20% mass,
+ * 2 cm COM shift) recovers to |e| < 0.1 m but still contacts the ground during
+ * the transient, so it does not "survive" the no-contact envelope. See
+ * docs/disturbances.md for the re-pinned grid and the M6 targets.
  */
 export const PAYLOAD_SMALL: PayloadSpec = { mass: 0.003, position: [0.501, 0, 0] };
 export const PAYLOAD_LARGE_STRESS: PayloadSpec = PAYLOAD_2CM;

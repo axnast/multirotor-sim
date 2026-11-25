@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:slow": "vitest run --config vitest.slow.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.viewer.json --noEmit",
     "typecheck:core": "tsc --noEmit",

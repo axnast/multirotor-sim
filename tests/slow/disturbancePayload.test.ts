@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultControllerParams } from "../src/core/control/controller";
-import type { ControllerParams } from "../src/core/control/types";
+import { defaultControllerParams } from "../../src/core/control/controller";
+import type { ControllerParams } from "../../src/core/control/types";
 import {
   applyPayload,
   PAYLOAD_2CM,
@@ -9,18 +9,18 @@ import {
   PAYLOAD_SMALL,
   payloadCenterOfMass,
   parallelAxisTensor,
-} from "../src/core/disturbance/payload";
-import { disturbanceParamsFor } from "../src/core/disturbance/scenario";
-import { makeHex } from "../src/core/multirotor/config";
-import { quatRotateVector } from "../src/core/math/quat";
-import { TELEMETRY_CAPACITY } from "../src/viewer/sim/constants";
-import { MISSIONS } from "../src/viewer/sim/mission";
+} from "../../src/core/disturbance/payload";
+import { disturbanceParamsFor } from "../../src/core/disturbance/scenario";
+import { makeHex } from "../../src/core/multirotor/config";
+import { quatRotateVector } from "../../src/core/math/quat";
+import { TELEMETRY_CAPACITY } from "../../src/viewer/sim/constants";
+import { MISSIONS } from "../../src/viewer/sim/mission";
 import {
   createSimulation,
   stepOnce,
   tiltAngleRad,
   type SimulationPlant,
-} from "../src/viewer/sim/runner";
+} from "../../src/viewer/sim/runner";
 
 function plant(): SimulationPlant {
   const config = makeHex({ groundPlane: true });
