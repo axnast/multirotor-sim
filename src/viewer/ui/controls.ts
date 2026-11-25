@@ -54,6 +54,15 @@ function decimalsFor(step: number): number {
   return 0;
 }
 
+/** Drive the CSS gradient so the filled portion of a range slider is visible. */
+function updateRangeFill(input: HTMLInputElement): void {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const value = Number(input.value);
+  const fraction = max === min ? 0 : (value - min) / (max - min);
+  input.style.setProperty("--fill", `${(fraction * 100).toFixed(2)}%`);
+}
+
 function createControls(
   parent: HTMLElement,
   params: ControllerParams,
@@ -129,9 +138,10 @@ function createControls(
     altitudeInput,
     altitudeOutput,
   );
-  altitudeInput.addEventListener("input", () =>
-    callbacks.onAltitude(Number(altitudeInput.value)),
-  );
+  altitudeInput.addEventListener("input", () => {
+    updateRangeFill(altitudeInput);
+    callbacks.onAltitude(Number(altitudeInput.value));
+  });
 
   const yawInput = document.createElement("input");
   yawInput.type = "range";
@@ -147,9 +157,10 @@ function createControls(
     yawInput,
     yawOutput,
   );
-  yawInput.addEventListener("input", () =>
-    callbacks.onYaw((Number(yawInput.value) * Math.PI) / 180),
-  );
+  yawInput.addEventListener("input", () => {
+    updateRangeFill(yawInput);
+    callbacks.onYaw((Number(yawInput.value) * Math.PI) / 180);
+  });
   waypoint.append(altitudeRow, yawRow);
   element.appendChild(waypoint);
 
@@ -207,9 +218,10 @@ function createControls(
       input.step = String(spec.step);
       input.value = String(spec.get(params));
       const output = document.createElement("output");
-      input.addEventListener("input", () =>
-        callbacks.onSlider(spec.id, Number(input.value)),
-      );
+      input.addEventListener("input", () => {
+        updateRangeFill(input);
+        callbacks.onSlider(spec.id, Number(input.value));
+      });
       row.append(
         Object.assign(document.createElement("span"), { textContent: spec.label }),
         input,
@@ -234,15 +246,18 @@ function createControls(
       if (input === undefined || output === undefined) continue;
       const value = spec.get(next);
       input.value = String(value);
+      updateRangeFill(input);
       output.textContent = `${value.toFixed(decimalsFor(spec.step))} ${spec.unit}`;
     }
   };
   const setWaypoint = (setpoint: Setpoint): void => {
     const altitude = setpoint.position[2];
     altitudeInput.value = String(altitude);
+    updateRangeFill(altitudeInput);
     altitudeOutput.textContent = `${altitude.toFixed(1)} m`;
     const yawDegrees = (setpoint.yaw * 180) / Math.PI;
     yawInput.value = String(yawDegrees);
+    updateRangeFill(yawInput);
     yawOutput.textContent = `${yawDegrees.toFixed(0)}°`;
   };
 
