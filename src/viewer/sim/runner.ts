@@ -21,9 +21,20 @@ import { quatRotateVector, type Quat } from "../../core/math/quat";
 import { vec3Length, vec3Sub, type Vec3 } from "../../core/math/vec3";
 import type { MultirotorConfig } from "../../core/multirotor/config";
 import {
+  STILL_AIR,
   stepMultirotorDetailed,
   type MultirotorState,
 } from "../../core/multirotor/dynamics";
+import {
+  createDisturbanceState,
+  disturbanceStep,
+  isDisturbanceActive,
+} from "../../core/disturbance/step";
+import type {
+  DisturbanceDiagnostics,
+  DisturbanceParams,
+  DisturbanceState,
+} from "../../core/disturbance/types";
 import { mixDetailed, type MixResult } from "../../core/multirotor/mixer";
 import {
   DEFAULT_MAX_STEPS_PER_FRAME,
@@ -60,6 +71,8 @@ export interface SimulationStats {
   readonly maxTiltRad: number;
   readonly maxPositionErrorM: number;
   readonly maxSpeedMps: number;
+  /** Steps where the nominal mixer commanded above the plant's true ceiling. */
+  readonly plantSaturationSteps: number;
   readonly saturationSteps: number;
   readonly contactSteps: number;
 }
@@ -67,6 +80,12 @@ export interface SimulationStats {
 export interface SimulationState {
   readonly multirotor: MultirotorState;
   readonly controller: ControllerState;
+  /** Disturbance memory, or null when every model is disabled. */
+  readonly disturbance: DisturbanceState | null;
+  readonly disturbanceParams: DisturbanceParams | null;
+  readonly diagnostics: DisturbanceDiagnostics | null;
+  /** Config actually used by the plant; the mixer/controller never see it. */
+  readonly trueConfig: MultirotorConfig;
   readonly mission: MissionRuntime | null;
   /** Mission used by reset, even while in manual setpoint mode. */
   readonly homeMission: Mission;
@@ -113,6 +132,7 @@ function zeroStats(): SimulationStats {
     maxTiltRad: 0,
     maxPositionErrorM: 0,
     maxSpeedMps: 0,
+    plantSaturationSteps: 0,
     saturationSteps: 0,
     contactSteps: 0,
   };
@@ -123,7 +143,10 @@ export function createSimulation(
   plant: SimulationPlant,
   mission: Mission,
   trailCapacity: number = TRAIL_CAPACITY,
+  disturbance: DisturbanceParams | null = null,
 ): SimulationState {
+  const activeParams =
+    disturbance !== null && isDisturbanceActive(disturbance) ? disturbance : null;
   const runtime = createMissionRuntime(mission);
   const multirotor = missionInitialMultirotor(plant.config, mission);
   const setpoint = missionSetpoint(runtime);
@@ -136,6 +159,10 @@ export function createSimulation(
   return {
     multirotor,
     controller: initialControllerState(),
+    disturbance: activeParams === null ? null : createDisturbanceState(activeParams),
+    disturbanceParams: activeParams,
+    diagnostics: null,
+    trueConfig: plant.config,
     mission: runtime,
     homeMission: mission,
     setpoint,
@@ -166,19 +193,49 @@ export function stepOnce(
   state: SimulationState,
   plant: SimulationPlant,
 ): SimulationState {
+  // Disturbance boundary: the controller is given the corrupted measurement,
+  // the mixer and controller use the NOMINAL config/params, and only the plant
+  // sees `trueConfig` and the wind. When nothing is enabled this is a pure
+  // pass-through of the same objects, so the pre-M5 arithmetic is unchanged.
+  const disturbed =
+    state.disturbance !== null && state.disturbanceParams !== null
+      ? disturbanceStep(
+          state.disturbance,
+          state.disturbanceParams,
+          measurementOf(state.multirotor),
+          state.multirotor.motorSpeeds,
+          plant.config,
+          SIM_DT,
+        )
+      : null;
   const command = controllerStepDetailed(
     state.controller,
-    measurementOf(state.multirotor),
+    disturbed?.measurement ?? measurementOf(state.multirotor),
     state.setpoint,
     plant.params,
     SIM_DT,
   );
   const mixed = mixDetailed(plant.config, command.wrench);
+  const trueConfig = disturbed?.trueConfig ?? plant.config;
+  const environment = disturbed?.environment ?? STILL_AIR;
+  // A voltage drop can lower the ceiling below the rotors' current speed.
+  // The core state invariant forbids overspeed, so project onto the new
+  // ceiling before the step (documented as an instantaneous ESC limit).
+  const plantMultirotor =
+    disturbed !== null && disturbed.diagnostics.maxOmegaScale < 1
+      ? {
+          ...state.multirotor,
+          motorSpeeds: state.multirotor.motorSpeeds.map((omega, index) =>
+            Math.min(omega, trueConfig.motors[index]?.maxOmega ?? omega),
+          ),
+        }
+      : state.multirotor;
   const result = stepMultirotorDetailed(
-    state.multirotor,
-    plant.config,
+    plantMultirotor,
+    trueConfig,
     mixed.motorSpeeds,
     SIM_DT,
+    environment,
   );
   const nextMultirotor = result.state;
   const nextStepCount = state.stepCount + 1;
@@ -194,6 +251,11 @@ export function stepOnce(
     maxTiltRad: Math.max(state.stats.maxTiltRad, tiltAngleRad(nextMultirotor.body.orientation)),
     maxPositionErrorM: Math.max(state.stats.maxPositionErrorM, positionError),
     maxSpeedMps: Math.max(state.stats.maxSpeedMps, vec3Length(nextMultirotor.body.velocity)),
+    plantSaturationSteps:
+      state.stats.plantSaturationSteps +
+      (mixed.motorSpeeds.some((omega, index) =>
+        omega > (trueConfig.motors[index]?.maxOmega ?? Infinity) + 1e-9,
+      ) ? 1 : 0),
     saturationSteps: state.stats.saturationSteps + (mixed.saturated ? 1 : 0),
     contactSteps: state.stats.contactSteps + (result.ground?.contacted ? 1 : 0),
   };
@@ -217,6 +279,9 @@ export function stepOnce(
     ...state,
     multirotor: nextMultirotor,
     controller: command.state,
+    disturbance: disturbed?.state ?? state.disturbance,
+    diagnostics: disturbed?.diagnostics ?? state.diagnostics,
+    trueConfig,
     mission: nextRuntime,
     setpoint: nextSetpoint,
     stepCount: nextStepCount,
@@ -295,7 +360,9 @@ export function selectMission(
   plant: SimulationPlant,
   mission: Mission,
 ): SimulationState {
-  const fresh = createSimulation(plant, mission, state.trail.capacity);
+  const fresh = createSimulation(
+    plant, mission, state.trail.capacity, state.disturbanceParams,
+  );
   return { ...fresh, speed: state.speed, paused: false };
 }
 
@@ -304,8 +371,26 @@ export function resetSimulation(
   state: SimulationState,
   plant: SimulationPlant,
 ): SimulationState {
-  const fresh = createSimulation(plant, state.homeMission, state.trail.capacity);
+  const fresh = createSimulation(
+    plant, state.homeMission, state.trail.capacity, state.disturbanceParams,
+  );
   return { ...fresh, speed: state.speed, paused: state.paused };
+}
+
+/** Install (or clear) disturbance params without resetting the flight. */
+export function withDisturbance(
+  state: SimulationState,
+  plant: SimulationPlant,
+  params: DisturbanceParams | null,
+): SimulationState {
+  const active = params !== null && isDisturbanceActive(params) ? params : null;
+  return {
+    ...state,
+    disturbanceParams: active,
+    disturbance: active === null ? null : createDisturbanceState(active),
+    diagnostics: null,
+    trueConfig: plant.config,
+  };
 }
 
 export function setPaused(state: SimulationState, paused: boolean): SimulationState {

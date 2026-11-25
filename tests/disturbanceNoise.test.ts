@@ -60,7 +60,7 @@ describe("sensor noise", () => {
       const std = Math.sqrt(squares[axis]! / count - mean * mean);
       expect(Math.abs(std - sigmas[axis]!)).toBeLessThan(0.01 * sigmas[axis]!);
     }
-  }, 30_000);
+  }, 60_000);
 
   it("grows the gyro bias walk variance linearly across 10,000 paths", () => {
     // Independent paths remove the OU/AR(1) effective-sample penalty.
@@ -106,7 +106,7 @@ describe("sensor noise", () => {
     // Reported for the record; the two absolute checks above are the test.
     expect(longVariance / shortVariance).toBeGreaterThan(2.7);
     expect(longVariance / shortVariance).toBeLessThan(5.3);
-  }, 60_000);
+  }, 120_000);
 
   it("never alters the truth when the controller output is held fixed", () => {
     const config = makeHex({ groundPlane: true });

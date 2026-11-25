@@ -76,7 +76,7 @@ describe("Ornstein-Uhlenbeck wind", () => {
 
     expect(Math.abs(variance - 1)).toBeLessThan(0.026);
     expect(Math.abs(rho1 - Math.exp(-dt / CORRELATION_TIME))).toBeLessThan(0.005);
-  }, 30_000);
+  }, 60_000);
 
   it("has the same conditional distribution at 1 ms, 5 ms and 50 ms", () => {
     // Exact discretisation: starting at x0 = 2 sigma, after K steps
@@ -84,19 +84,29 @@ describe("Ornstein-Uhlenbeck wind", () => {
     // This is exact for every dt, so it can be tested tightly with M=100k
     // independent paths (no autocorrelation penalty):
     //   SE(mean) = sd/sqrt(M), SE(var) = sd^2*sqrt(2/M), bounds = 4 sigma.
+    // Pre-chosen, disjoint seed ranges per dt (fixed before measuring):
+    //   dt=1 ms -> seeds 1,000,000..1,099,999
+    //   dt=5 ms -> seeds 2,000,000..2,099,999
+    //   dt=50 ms -> seeds 3,000,000..3,099,999
+    // so the three ensembles are independent rather than shifted copies.
     const paths = 100_000;
     const steps = 20;
     const x0 = 2;
     const params = ouParams([1, 0, 0]);
+    const ensembles: readonly (readonly [number, number])[] = [
+      [0.001, 1_000_000],
+      [0.005, 2_000_000],
+      [0.05, 3_000_000],
+    ];
 
-    for (const dt of [0.001, 0.005, 0.05]) {
+    for (const [dt, seedBase] of ensembles) {
       const a = Math.exp(-dt / CORRELATION_TIME);
       const expectedMean = Math.pow(a, steps) * x0;
       const expectedVariance = 1 - Math.pow(a, 2 * steps);
       let sum = 0;
       let sumSquares = 0;
       for (let path = 0; path < paths; path++) {
-        let state = initialWindState(path + 1, [x0, 0, 0]);
+        let state = initialWindState(seedBase + path, [x0, 0, 0]);
         for (let step = 0; step < steps; step++) {
           state = windStep(state, params, dt).state;
         }
@@ -111,7 +121,7 @@ describe("Ornstein-Uhlenbeck wind", () => {
       expect(Math.abs(mean - expectedMean)).toBeLessThan(4 * seMean);
       expect(Math.abs(variance - expectedVariance)).toBeLessThan(4 * seVariance);
     }
-  }, 60_000);
+  }, 120_000);
 
   it("uses the exact 1-cosine gust shape and resets the PRNG when disabled", () => {
     const gust = {

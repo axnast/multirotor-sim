@@ -12,6 +12,8 @@
 
 import type { Measurement } from "../control/types";
 import type { Vec3 } from "../math/vec3";
+import type { Environment } from "../multirotor/dynamics";
+import type { MultirotorConfig } from "../multirotor/config";
 
 /**
  * xoshiro128** state plus one cached Box–Muller spare.
@@ -98,4 +100,93 @@ export interface NoiseStepResult {
   readonly state: SensorState;
   /** Corrupted copy of the truth; the truth itself is never changed. */
   readonly measurement: Measurement;
+}
+
+/**
+ * Placeholder pack model. `minVoltageFraction` 0.85 is a plausible 6S pack;
+ * the named stress pack uses 0.45 and is explicitly non-physical, used only
+ * to make saturation observable in short runs.
+ */
+export interface BatteryParams {
+  readonly enabled: boolean;
+  readonly initialStateOfCharge: number;
+  readonly nominalVoltage: number;
+  readonly minVoltageFraction: number;
+  readonly internalResistance: number;
+  /** Electrical-to-mechanical efficiency used to infer current from power. */
+  readonly efficiency: number;
+  readonly capacityAh: number;
+}
+
+export interface BatteryState {
+  readonly stateOfCharge: number;
+  /** Loaded terminal voltage (V). */
+  readonly voltage: number;
+  /** Open-circuit voltage from state of charge (V). */
+  readonly openCircuitVoltage: number;
+  /** Draw from the pack (A), inferred from mechanical rotor power. */
+  readonly current: number;
+  /** Total mechanical rotor power (W). */
+  readonly power: number;
+}
+
+export interface BatteryStepResult {
+  readonly state: BatteryState;
+  /** `maxOmega_eff / maxOmega_nominal` for the upcoming step. */
+  readonly scale: number;
+}
+
+/** A point payload at a body-frame position in the original airframe frame. */
+export interface PayloadSpec {
+  readonly mass: number;
+  readonly position: Vec3;
+}
+
+/** Discrete payload event: nominal until the step starting at `atTime`. */
+export interface PayloadEvent {
+  readonly atTime: number;
+  readonly payload: PayloadSpec;
+}
+
+/** All disturbance parameters are plain data, suitable for M6 benchmarks. */
+export interface DisturbanceParams {
+  readonly seed: number;
+  readonly wind: WindParams;
+  readonly sensors: SensorParams;
+  readonly battery: BatteryParams;
+  readonly payload: PayloadEvent | null;
+}
+
+/** Disturbance diagnostics exposed to the HUD, CSV and M6 metrics. */
+export interface DisturbanceDiagnostics {
+  readonly wind: Vec3;
+  readonly voltage: number;
+  readonly stateOfCharge: number;
+  readonly openCircuitVoltage: number;
+  readonly current: number;
+  readonly power: number;
+  readonly maxOmegaScale: number;
+  readonly payloadApplied: boolean;
+  readonly trueMass: number;
+}
+
+/** All disturbance memory, including both independent PRNG streams. */
+export interface DisturbanceState {
+  readonly wind: WindState;
+  readonly sensors: SensorState;
+  readonly battery: BatteryState;
+  readonly payloadApplied: boolean;
+  /** Start time of the next core step (s). */
+  readonly time: number;
+}
+
+export interface DisturbanceStepResult {
+  readonly state: DisturbanceState;
+  /** Corrupted controller measurement. */
+  readonly measurement: Measurement;
+  /** Disturbed config used by the plant only; never by controller or mixer. */
+  readonly trueConfig: MultirotorConfig;
+  /** Wind passed through the existing Environment.windVelocity. */
+  readonly environment: Environment;
+  readonly diagnostics: DisturbanceDiagnostics;
 }
