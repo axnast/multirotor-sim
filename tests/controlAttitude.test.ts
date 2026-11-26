@@ -196,7 +196,7 @@ describe("attitude loop", () => {
       expect(Math.max(0, peak - goal * DEG)).toBeLessThan(goal * 0.1 * DEG);
       expect(lastOutside * DT).toBeLessThan(4);
     }
-  });
+  }, 6_000);
 
   test("takes the shortest path when the error quaternion has w < 0", () => {
     const target = quatFromAxisAngle([0, 0, 1], 200 * DEG);

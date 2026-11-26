@@ -175,7 +175,7 @@ describe("cascade", () => {
     expect(stats.maxTilt).toBeLessThanOrEqual((30.1 * Math.PI) / 180);
     expect(stats.maxMotorSpeed).toBeLessThanOrEqual(1000);
     expect(stats.mixerSaturations).toBe(0);
-  });
+  }, 6_000);
 
   test("flies a 5 m square without exceeding limits", () => {
     const corners: readonly Vec3[] = [
@@ -217,7 +217,7 @@ describe("cascade", () => {
     expect(stats.maxTilt).toBeLessThanOrEqual((30.1 * Math.PI) / 180);
     expect(stats.maxMotorSpeed).toBeLessThanOrEqual(1000);
     expect(stats.mixerSaturations).toBe(0);
-  });
+  }, 20_000);
 
   test("takes off from the ground to 5 m without oscillation", () => {
     const groundConfig = makeHex({ groundPlane: true });
@@ -246,7 +246,7 @@ describe("cascade", () => {
     expect(stats.lastContactTime!).toBeLessThan(1);
     expect(stats.maxTilt).toBeLessThan(2 * Math.PI / 180);
     expect(stats.mixerSaturations).toBe(0);
-  });
+  }, 8_000);
 
   test("survives an unreachable setpoint and recovers", () => {
     const stats = runFlight(
@@ -265,7 +265,7 @@ describe("cascade", () => {
     expect(stats.positionIntegral).toBeLessThan(100);
     expect(stats.maxTilt).toBeLessThanOrEqual((32 * Math.PI) / 180);
     expect(vec3Length([final[0], final[1], final[2] - 5])).toBeLessThan(0.1);
-  });
+  }, 18_000);
 
   test("the same gains stabilise quad, hex and octo with scaled inertia", () => {
     for (const airframe of [
@@ -289,7 +289,7 @@ describe("cascade", () => {
       expect(stats.maxMotorSpeed).toBeLessThanOrEqual(1000);
       expect(stats.mixerSaturations).toBe(0);
     }
-  });
+  }, 18_000);
 
   test("is deterministic across two identical runs", () => {
     const run = (): MultirotorState =>

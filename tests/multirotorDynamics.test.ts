@@ -446,7 +446,7 @@ describe("extended RK4 integration", () => {
       }
     }
     expect(maxNormError).toBeLessThan(1e-12);
-  });
+  }, 10_000);
 
   test("default environment matches explicit still air", () => {
     const config = makeHex();

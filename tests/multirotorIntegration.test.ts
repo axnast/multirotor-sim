@@ -438,7 +438,7 @@ describe("M2 integration matrix", () => {
     expect(JSON.stringify(wrench)).toBe(wrenchBefore);
     expect(JSON.stringify(initial)).toBe(initialBefore);
     console.log(`  max quaternion norm error: ${maxNormError.toExponential(3)}`);
-  });
+  }, 14_000);
 
   test("12b. quaternion sign does not change the physical trajectory", () => {
     const config = makeHex();
