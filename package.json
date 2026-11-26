@@ -20,7 +20,9 @@
     "demo": "tsx scripts/dropBox.ts",
     "demo:hover": "tsx scripts/hoverDemo.ts",
     "demo:flight": "tsx scripts/flightDemo.ts",
-    "demo:disturbance": "tsx scripts/disturbanceDemo.ts"
+    "demo:disturbance": "tsx scripts/disturbanceDemo.ts",
+    "tune:calibrate": "tsx scripts/calibrateCmaes.ts",
+    "bench:throughput": "tsx scripts/measureParallel.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
