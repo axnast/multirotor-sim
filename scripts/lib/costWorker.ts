@@ -23,9 +23,15 @@ const suite = createCostSuite(config, params, data.steps, data.baselineTable);
 
 parentPort?.on("message", (job: Job) => {
   const result = suite.evaluate(withGains(params, job.vector), job.seeds);
+  const failed = result.terms.some(
+    (term) =>
+      term.reason !== null &&
+      !(term.key === "mass20" && term.reason === "ground contact in flight"),
+  );
   parentPort?.postMessage({
     id: job.id,
     total: result.total,
+    failed,
     terms: result.terms.map((term) => ({
       key: term.key,
       normalized: term.normalized,

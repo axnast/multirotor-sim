@@ -60,12 +60,17 @@ changed after seeing held-out results.
    destroy the gradient); NaN/Inf/divergence/contact still stop early.
 
 **Startup-burst diagnosis (PI variant, dev seed 1):** the ZN attitude P gain
-(44.95) turns small noisy attitude errors into desired rates up to ~2 rad/s in
-the first second; the rate PID then demands ~0.94 N·m of torque and drives one
-motor group to 0 rad/s while the other reaches 780–844 rad/s. The rate
-integrators stay near 0.001–0.02 (no windup), and after the initial second the
-mixer stops saturating (whole-run fraction only ~0.005). This is why the
-sustained rule, not the old cumulative-from-t=0 rule, is the right criterion.
+(44.95) is closed through the aggressive ZN rate loop, and the desired rate
+grows to ~2 rad/s over the first second, after which the rate PID demands
+~0.94 N·m and one motor group is driven to 0 rad/s while the other reaches
+780–844 rad/s. The rate integrators stay near 0.001–0.02, so the large rate
+integral gain (Ti = 0.163 s) is not the driver; sensor noise alone
+(0.2° × 45 ≈ 0.16 rad/s) is also far too small. The single root cause was
+**not isolated**: the growth is consistent with an unstable attitude-loop
+oscillation from the very high ZN P gain, but we do not claim to have proven
+that mechanism. After the first second the mixer stops saturating (whole-run
+fraction only ~0.005), which is why the sustained rule, not the old
+cumulative-from-t=0 rule, is the right criterion.
 
 **Yaw-authority reconciliation:** the earlier 0.90 N·m figure summed
 `kQ·ω_max²` over all six motors without the thrust constraint and is wrong.
@@ -160,9 +165,18 @@ headline; any hard failure uses the graded finite penalty of amendment 8. The
 measured default cost is **1.000000000000** on dev seeds 1–5.
 
 Hard failures use the graded finite penalty `100*(1+excess)` (non-finite states
-1000) with a logged reason: non-finite or divergent state (|x| or |v| > 100),
-ground contact in flight, or **sustained** mixer saturation above 20% of steps
-over `t >= 5 s`. A single rollout may stop early on failure.
+1000) with a logged reason: non-finite or divergent state, ground contact in
+flight, or **sustained** mixer saturation above 20% of steps over `t >= 5 s`.
+
+Divergence criterion: at every core step the **true** position and velocity are
+checked; divergence is `|position| > 100 m` or `|velocity| > 100 m/s` (or a
+non-finite value), with `excess` equal to the fraction of the run completed when
+it occurs. Over dev seeds 1–5 and all 11 scenarios the maxima are: M5 default
+`max |position| = 14.637 m` (strong/seed 5) and `max |velocity| = 2.710 m/s`;
+ZN ultimate-gain `13.460 m` and `2.601 m/s`. The margin to the 100 threshold is
+therefore at least **6.8×**, so viable candidates are not mislabeled divergent.
+A single rollout may stop early on NaN/Inf, divergence or ground contact, but
+not on the sustained-saturation check (see amendment 8).
 **Exception:** ground contact in the +20% mass scenario is a continuous cost
 term (the default touches down around 4 s), never a failure. The default gains
 pass every scenario.
@@ -196,7 +210,11 @@ candidate on the **fixed full dev seeds 1–5** at generations **60 and 75**;
 extend to **1000** only if the 75-vs-60 cost improved by **more than 2%**.
 Rotating-subset in-run costs are not comparable across generations; held-out
 seeds are never consulted. Single-rollout early stop on hard failure is allowed.
-The history CSV logs `rescore_generation,rescore_dev_cost` at those two points.
+The history CSV logs `rescore_generation,rescore_dev_cost` at those two points,
+plus `failed_candidates` (count of hard-failed candidates in the generation),
+`median_cost` and the generation-0 default reference `default_reference = 1.000`
+on every row. Older rows without these columns are accepted on resume with
+neutral defaults.
 
 Measured full-length noisy cost: **45.37 s/evaluation** single-threaded after
 baseline caching (93.59 s including baseline computation). At 8 workers:

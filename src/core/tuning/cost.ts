@@ -123,6 +123,9 @@ export interface RolloutMetrics {
   readonly saturationSteps: number;
   readonly contactSteps: number;
   readonly jitter: number;
+  /** Peak true position/speed, used to verify divergence margin. */
+  readonly maxPositionM: number;
+  readonly maxSpeedMps: number;
   /** Sustained mixer-saturation fraction over t >= 5 s. */
   readonly sustainedSaturation: number;
   readonly failure: string | null;
@@ -249,6 +252,8 @@ export function rollout(
   let reached = false;
   let overshoot = 0;
   let maxTilt = 0;
+  let maxPositionM = 0;
+  let maxSpeedMps = 0;
   let saturationSteps = 0;
   let sustainedSteps = 0;
   let sustainedSaturationSteps = 0;
@@ -273,6 +278,8 @@ export function rollout(
     );
     const position = result.state.body.position;
     const velocity = result.state.body.velocity;
+    maxPositionM = Math.max(maxPositionM, Math.hypot(...position));
+    maxSpeedMps = Math.max(maxSpeedMps, Math.hypot(...velocity));
     nonfinite = [...position, ...velocity].some((value) => !Number.isFinite(value));
     if (
       nonfinite ||
@@ -376,6 +383,8 @@ export function rollout(
     settling: (lastOutside + 1) * DT,
     ise,
     maxTilt,
+    maxPositionM,
+    maxSpeedMps,
     saturationSteps,
     contactSteps,
     jitter: Math.sqrt(jitterVariance),

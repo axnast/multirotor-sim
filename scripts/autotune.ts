@@ -68,6 +68,7 @@ const STEPS = SMOKE_STEPS ?? FULL_STEPS;
 interface Evaluation {
   readonly id: number;
   readonly total: number;
+  readonly failed: boolean;
 }
 
 interface HistoryRow {
@@ -79,6 +80,11 @@ interface HistoryRow {
   /** Fixed dev-seed 1-5 re-scores at generations 60 and 75 (extension rule). */
   readonly rescoreGeneration: number | null;
   readonly rescoreCost: number | null;
+  /** Generation diagnostics added before the pre-run smoke test. */
+  readonly failedCandidates: number;
+  readonly medianCost: number;
+  /** Generation-0 default reference under the fixed protocol: exactly 1.000. */
+  readonly defaultReference: number;
 }
 
 function makePool(baselineTable: BaselineTable, steps: number): {
@@ -160,7 +166,8 @@ async function main(): Promise<void> {
     state = createState({ dimension: 9, seed: SEED, lambda: 10, bounds }, startVector);
     writeFileSync(
       HISTORY,
-      "generation,evaluations,best_inrun_cost,sigma,seeds,rescore_generation,rescore_dev_cost\n",
+      "generation,evaluations,best_inrun_cost,sigma,seeds,rescore_generation,rescore_dev_cost," +
+        "failed_candidates,median_cost,default_reference\n",
     );
   } else {
     const saved = JSON.parse(readFileSync(CHECKPOINT, "utf8")) as {
@@ -170,7 +177,16 @@ async function main(): Promise<void> {
       incumbentCost?: number;
     };
     state = deserializeState(saved.state);
-    history = saved.history;
+    // Backward compatible: rows written before the three diagnostic columns
+    // get neutral defaults so the resume logic is unchanged.
+    history = saved.history.map((row) => ({
+      ...row,
+      rescoreGeneration: row.rescoreGeneration ?? null,
+      rescoreCost: row.rescoreCost ?? null,
+      failedCandidates: row.failedCandidates ?? 0,
+      medianCost: row.medianCost ?? row.best,
+      defaultReference: row.defaultReference ?? 1,
+    }));
     if (saved.incumbent !== undefined) incumbent = saved.incumbent;
     if (saved.incumbentCost !== undefined) incumbentCost = saved.incumbentCost;
   }
@@ -194,6 +210,12 @@ async function main(): Promise<void> {
     const jobs = pending.candidates.map((vector) => ({ id: nextId++, vector, seeds }));
     const results = await awaitPool(pool, jobs);
     results.sort((a, b) => a.id - b.id);
+    const sortedCosts = results.map((result) => result.total).sort((a, b) => a - b);
+    const middle = Math.floor(sortedCosts.length / 2);
+    const medianCost = sortedCosts.length % 2 === 1
+      ? sortedCosts[middle]!
+      : (sortedCosts[middle - 1]! + sortedCosts[middle]!) / 2;
+    const failedCandidates = results.filter((result) => result.failed).length;
     for (let index = 0; index < pending.candidates.length; index++) {
       candidates.push({ vector: pending.candidates[index]!, cost: results[index]!.total });
     }
@@ -218,12 +240,15 @@ async function main(): Promise<void> {
       seeds,
       rescoreGeneration,
       rescoreCost,
+      failedCandidates,
+      medianCost,
+      defaultReference: 1,
     };
     history = [...history, row];
     appendFileSync(
       HISTORY,
       `${row.generation},${row.evaluations},${row.best},${row.sigma},${seeds.join("|")},` +
-        `${rescoreGeneration ?? ""},${rescoreCost ?? ""}\n`,
+        `${rescoreGeneration ?? ""},${rescoreCost ?? ""},${failedCandidates},${medianCost},1.000\n`,
     );
     writeFileSync(
       CHECKPOINT,
