@@ -98,6 +98,17 @@ describe("M6 tuning cost", () => {
     expect(result.terms.some((term) => term.reason !== null)).toBe(true);
   }, 30_000);
 
+  it("aggregates over every supplied seed, not just the first", () => {
+    const bad = withGains(base, [
+      Math.log(1), Math.log(0.2), Math.log(0.1), Math.log(3), Math.log(3),
+      Math.log(0.5), Math.log(3), Math.log(0.002), Math.log(1),
+    ]);
+    const onlySeed1 = suite.evaluate(bad, [1]).total;
+    const bothSeeds = suite.evaluate(bad, [1, 2]).total;
+    expect(bothSeeds).not.toBe(onlySeed1);
+    expect(suite.evaluate(base, [1, 2, 3, 4, 5]).total).toBeCloseTo(1, 12);
+  }, 30_000);
+
   it("is deterministic for a fixed seed subset", () => {
     const first = suite.evaluate(base, SEEDS);
     const second = suite.evaluate(base, SEEDS);

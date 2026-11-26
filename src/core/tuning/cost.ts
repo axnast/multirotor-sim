@@ -123,9 +123,12 @@ export interface RolloutMetrics {
   readonly saturationSteps: number;
   readonly contactSteps: number;
   readonly jitter: number;
-  /** Peak true position/speed, used to verify divergence margin. */
+  /** Peak |motor speed derivative| over the run (rad/s²). */
+  readonly peakMotorRate: number;
+  /** Peak true position/speed and lowest altitude, for sanity checks. */
   readonly maxPositionM: number;
   readonly maxSpeedMps: number;
+  readonly minAltitudeM: number;
   /** Sustained mixer-saturation fraction over t >= 5 s. */
   readonly sustainedSaturation: number;
   readonly failure: string | null;
@@ -254,6 +257,7 @@ export function rollout(
   let maxTilt = 0;
   let maxPositionM = 0;
   let maxSpeedMps = 0;
+  let minAltitudeM = Infinity;
   let saturationSteps = 0;
   let sustainedSteps = 0;
   let sustainedSaturationSteps = 0;
@@ -261,6 +265,7 @@ export function rollout(
   let jitterSum = 0;
   let jitterSumSquared = 0;
   let jitterCount = 0;
+  let peakMotorRate = 0;
   let previousSpeeds: readonly number[] | null = null;
   let failure: string | null = null;
   let excess = 0;
@@ -280,6 +285,7 @@ export function rollout(
     const velocity = result.state.body.velocity;
     maxPositionM = Math.max(maxPositionM, Math.hypot(...position));
     maxSpeedMps = Math.max(maxSpeedMps, Math.hypot(...velocity));
+    minAltitudeM = Math.min(minAltitudeM, position[2]);
     nonfinite = [...position, ...velocity].some((value) => !Number.isFinite(value));
     if (
       nonfinite ||
@@ -335,6 +341,7 @@ export function rollout(
     if (nextTime >= 20 && previousSpeeds !== null) {
       for (let motor = 0; motor < result.state.motorSpeeds.length; motor++) {
         const derivative = result.state.motorSpeeds[motor]! - previousSpeeds[motor]!;
+        peakMotorRate = Math.max(peakMotorRate, Math.abs(derivative) / DT);
         jitterSum += derivative;
         jitterSumSquared += derivative * derivative;
         jitterCount++;
@@ -385,9 +392,11 @@ export function rollout(
     maxTilt,
     maxPositionM,
     maxSpeedMps,
+    minAltitudeM: Number.isFinite(minAltitudeM) ? minAltitudeM : 0,
     saturationSteps,
     contactSteps,
     jitter: Math.sqrt(jitterVariance),
+    peakMotorRate,
     sustainedSaturation,
     failure,
     excess,
@@ -396,8 +405,8 @@ export function rollout(
 }
 
 function tiltOf(state: MultirotorState): number {
-  const [x, y] = state.body.orientation;
-  // Body +z rotated into world: R33 = 1 - 2(x^2 + y^2).
+  // Quat order is [w, x, y, z]; body +z in world has R33 = 1 - 2(x^2 + y^2).
+  const [, x, y] = state.body.orientation;
   const worldZ = 1 - 2 * (x! * x! + y! * y!);
   return Math.acos(Math.min(1, Math.max(-1, worldZ)));
 }
@@ -456,6 +465,10 @@ function normalizedValue(
   }
 }
 
+/**
+ * Flat table keyed by `${seedListId}|${seed}|${term}`. A seed list id is the
+ * comma-joined seed list (e.g. "1,2,3,4,5"), so this is safely splittable on "|".
+ */
 export type BaselineTable = Readonly<Record<string, Baseline>>;
 
 export interface CostSuite {
@@ -463,69 +476,80 @@ export interface CostSuite {
   evaluate(params: ControllerParams, seeds: readonly number[]): CostResult;
 }
 
+function baselineKey(id: string, seed: number, key: CostKey): string {
+  return `${id}|${seed}|${key}`;
+}
+
 /**
- * Precompute baselines for the rotating seed subsets once, in the parent, so
- * worker processes never repeat the expensive default-gain rollouts.
+ * Precompute baselines for every seed in the requested subsets once, in the
+ * parent, so worker processes never repeat the expensive default rollouts.
  */
 export function createBaselineTable(
   seedLists: readonly (readonly number[])[],
   config: MultirotorConfig = makeHex({ groundPlane: true }),
   baseParams: ControllerParams = defaultControllerParams(config),
   steps: number = FULL_STEPS,
+  sensors = true,
 ): BaselineTable {
   const table: Record<string, Baseline> = {};
   for (const seeds of seedLists) {
-    for (const key of COST_KEYS) {
-      const metrics = rollout(config, baseParams, seeds[0]!, key, steps);
-      if (metrics.failure !== null && key !== "mass20") {
-        throw new RangeError(`default gains fail ${key}: ${metrics.failure}`);
+    const id = seeds.join(",");
+    for (const seed of seeds) {
+      for (const key of COST_KEYS) {
+        const metrics = rollout(config, baseParams, seed, key, steps, null, sensors);
+        if (metrics.failure !== null && key !== "mass20") {
+          throw new RangeError(`default gains fail ${key} on seed ${seed}: ${metrics.failure}`);
+        }
+        table[baselineKey(id, seed, key)] = baselineOf(metrics);
       }
-      table[`${seeds.join(",")}|${key}`] = baselineOf(metrics);
     }
   }
   return table;
 }
 
 /**
- * Build a suite. Baselines are computed lazily per seed subset and cached, so
- * the default gains score exactly 1.000 for every rotation subset. Tests may
- * pass a shorter `steps` to keep the fast suite fast; tuning always uses the
- * default FULL_STEPS = 120000.
+ * Build a suite. `evaluate` averages per-seed geometric-mean costs over ALL the
+ * supplied seeds; passing dev seeds 1-5 really scores five wind/battery/noise
+ * streams (the earlier `seeds[0]`-only bug is fixed). The default still scores
+ * exactly 1.000 for every subset. Tests may pass a shorter `steps`; tuning and
+ * benchmark always use FULL_STEPS = 120000.
  */
 export function createCostSuite(
   config: MultirotorConfig = makeHex({ groundPlane: true }),
   baseParams: ControllerParams = defaultControllerParams(config),
   steps: number = FULL_STEPS,
   precomputed: BaselineTable | null = null,
+  sensors = true,
 ): CostSuite {
   assertFixedDefaults(baseParams);
-  const baselines = new Map<string, Map<CostKey, Baseline>>();
+  const baselines = new Map<string, Map<string, Baseline>>();
   if (precomputed !== null) {
-    const ids = new Set(
-      Object.keys(precomputed).map((key) => key.slice(0, key.lastIndexOf("|"))),
-    );
-    for (const id of ids) {
-      const table = new Map<CostKey, Baseline>();
-      for (const key of COST_KEYS) {
-        const entry = precomputed[`${id}|${key}`];
-        if (entry !== undefined) table.set(key, entry);
+    for (const [flat, entry] of Object.entries(precomputed)) {
+      const parts = flat.split("|");
+      if (parts.length !== 3) continue;
+      const [id, seed, key] = parts as [string, string, string];
+      let group = baselines.get(id);
+      if (group === undefined) {
+        group = new Map();
+        baselines.set(id, group);
       }
-      if (table.size === COST_KEYS.length) baselines.set(id, table);
+      group.set(`${seed}|${key}`, entry);
     }
   }
 
-  function baselineFor(seeds: readonly number[]): Map<CostKey, Baseline> {
+  function baselineFor(seeds: readonly number[]): Map<string, Baseline> {
     const id = seeds.join(",");
     const cached = baselines.get(id);
     if (cached !== undefined) return cached;
-    const table = new Map<CostKey, Baseline>();
-    const seed = seeds[0]!;
-    for (const key of COST_KEYS) {
-      const metrics = rollout(config, baseParams, seed, key, steps);
-      if (metrics.failure !== null && key !== "mass20") {
-        throw new RangeError(`default gains fail ${key}: ${metrics.failure}`);
+    const table = new Map<string, Baseline>();
+    for (const seed of seeds) {
+      for (const key of COST_KEYS) {
+        const metrics = rollout(config, baseParams, seed, key, steps, null, sensors);
+        if (metrics.failure !== null && key !== "mass20") {
+          throw new RangeError(`default gains fail ${key} on seed ${seed}: ${metrics.failure}`);
+        }
+        table.set(`${seed}|${key}`, baselineOf(metrics));
       }
-      table.set(key, baselineOf(metrics));
     }
     baselines.set(id, table);
     return table;
@@ -537,27 +561,39 @@ export function createCostSuite(
       if (seeds.length === 0) throw new RangeError("at least one seed is required");
       assertFixedDefaults(params);
       const baseline = baselineFor(seeds);
-      const terms: TermBreakdown[] = [];
-      let logTotal = 0;
-      for (const key of COST_KEYS) {
-        const metrics = rollout(config, params, seeds[0]!, key, steps);
-        const failed =
-          metrics.failure !== null &&
-          !(key === "mass20" && metrics.failure === "ground contact in flight");
-        // Graded finite penalty gives CMA-ES a slope out of failure regions.
-        const value = failed
-          ? gradedPenalty(metrics.excess, metrics.nonfinite)
-          : normalizedValue(key, metrics, baseline.get(key)!);
-        logTotal += TERM_WEIGHTS[key] * Math.log(value);
-        terms.push({
+      const termLogs = new Map<CostKey, number[]>(COST_KEYS.map((key) => [key, []]));
+      const termReasons = new Map<CostKey, string | null>(COST_KEYS.map((key) => [key, null]));
+      let costSum = 0;
+      for (const seed of seeds) {
+        let logTotal = 0;
+        for (const key of COST_KEYS) {
+          const metrics = rollout(config, params, seed, key, steps, null, sensors);
+          const failed =
+            metrics.failure !== null &&
+            !(key === "mass20" && metrics.failure === "ground contact in flight");
+          const value = failed
+            ? gradedPenalty(metrics.excess, metrics.nonfinite)
+            : normalizedValue(key, metrics, baseline.get(`${seed}|${key}`)!);
+          logTotal += TERM_WEIGHTS[key] * Math.log(value);
+          termLogs.get(key)!.push(Math.log(value));
+          if (metrics.failure !== null && termReasons.get(key) === null) {
+            termReasons.set(key, metrics.failure);
+          }
+        }
+        costSum += Math.exp(logTotal);
+      }
+      const total = costSum / seeds.length;
+      const terms: TermBreakdown[] = COST_KEYS.map((key) => {
+        const logs = termLogs.get(key)!;
+        const normalized = Math.exp(logs.reduce((sum, value) => sum + value, 0) / logs.length);
+        return {
           key,
           weight: TERM_WEIGHTS[key],
-          value,
-          normalized: value,
-          reason: metrics.failure,
-        });
-      }
-      const total = Math.exp(logTotal);
+          value: normalized,
+          normalized,
+          reason: termReasons.get(key) ?? null,
+        };
+      });
       return { total, terms, seeds: [...seeds] };
     },
   };
