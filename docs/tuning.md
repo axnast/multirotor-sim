@@ -38,6 +38,14 @@ changed after seeing held-out results.
    costs are not comparable across generations. Extend to 1000 only if
    `(cost60 - cost75)/cost60 > 0.02`; held-out seeds are never consulted. The
    history CSV logs both re-scores.
+7. A fourth ZN baseline, **ZN reaction-curve PI, rate loop only** (rate PI with
+   attitude and position at M5 defaults — ZN applied only where it is well
+   defined), was added. Benchmark baselines are now: M3 gate, M5 default, gate
+   off, ZN ultimate-gain, ZN reaction-curve PID, ZN reaction-curve PI,
+   ZN reaction-curve PI (rate only), autotuned. A baseline that hard-fails in
+   any scenario is printed as **"fails (no valid RMS)"** and excluded from all
+   ratios and the geometric-mean headline; its 1e6 cost penalty is never used
+   as if it were an RMS value.
 
 ## Scope and fixed controller structure
 
@@ -87,9 +95,9 @@ is **on** at `DEFAULT_SENSOR_PARAMS` sigmas and the realistic 6S pack sag is
 scored under these identical conditions:
 (1) M3 gate (`integralDwell = 0`, default gains), (2) M5 default (release on),
 (3) gate off (`integralSeparation = 1e9`, reference only), (4) ZN ultimate-gain,
-(5) ZN reaction-curve PID, (6) ZN reaction-curve PI, (7) autotuned. Every
-baseline number that differs from the README noise-off table is reported; that
-section is updated later.
+(5) ZN reaction-curve PID, (6) ZN reaction-curve PI, (7) ZN reaction-curve PI
+(rate only), (8) autotuned. Every baseline number that differs from the README
+noise-off table is reported; that section is updated later.
 
 ## Cost function (`src/core/tuning/cost.ts`)
 
@@ -187,12 +195,23 @@ crosses 1 (decaying below, growing above). Safety caps on every sweep.
   `Kp=0.9/(R L), Ti=3.33 L, Kd=0` (classic PI rule, no derivative). This is the
   third labelled baseline; neither variant is hand-tuned.
 
-Diagnosis of the reaction-curve PID failure: the saturation comes from the
-**pitch and yaw axes** — the ZN attitude P gain (tilt=yaw ≈ 44.95) demands rate
-commands far above the fixed yaw-rate limit (1.2 rad/s) and yaw acceleration
-limit (1.88 rad/s²). With the default attitude gains the rate loop does not
-saturate. It is **not derivative-noise amplification**: removing kd (PI variant)
-does not help, and the PID variant still saturates with sensor noise off.
+Diagnosis of the reaction-curve PID/PI failures: the quantity that saturates is
+**torque demand against yaw authority**, not a rate command "beyond the limits".
+`attitudeRateCommand` clamps its own output to the fixed tilt/yaw rate limits;
+the ZN attitude P gain (tilt=yaw ≈ 44.95, from Ku ≈ 99.89) then makes the rate
+PID demand ≈0.94 N·m of torque while the whole hexacopter's yaw authority is
+≈0.90 N·m (yaw acceleration limit 1.884 rad/s², Izz ≈ 0.0938 kg·m²). Pitch and
+yaw rate axes saturate repeatedly; with default attitude gains the mixer never
+saturates. It is **not derivative-noise amplification**: removing kd (PI) does
+not help, and the PID variant still saturates with sensor noise off.
+
+Reconciliation of the 20% hard-failure criterion: the failing variants saturate
+in a startup burst — at the first checked step (index 999) the **running**
+fraction is 0.39–0.65, which fires the check; their whole-run fraction is only
+0.003–0.005 because saturation stops after the burst. The check is therefore
+not misfiring: the 1000-step warm-up removes the earlier step-0 artifact, and
+the M5 default and ZN ultimate-gain variants have a maximum running saturation
+fraction of **0.0000** in all 11 scenarios after the warm-up.
 
 Neither variant is hand-tuned; a poor or unstable result is reported as the
 baseline. Full Ku/Tu/R/L and gains: `out/zn_log.md`, `data/znGains.json`.

@@ -229,6 +229,13 @@ function main(): void {
     attitude: reaction.attitude,
     position: reaction.position,
   };
+  // ZN applied only where it is well defined: rate loop PI, inner/outer loops
+  // left at M5 defaults.
+  const reactionPiRateOnly = {
+    rate: reactionPi.rate,
+    attitude: base.attitude,
+    position: base.position,
+  };
   const lines = [
     "# Ziegler-Nichols identification",
     "",
@@ -247,6 +254,9 @@ function main(): void {
       `Kp=${piGains.kp.toFixed(4)}, Ti=${(3.33 * reaction.curve.deadTime).toFixed(4)} s, Kd=0; ` +
       "attitude/position as in the PID variant",
     "",
+    "## ZN reaction-curve PI, rate loop only",
+    "rate PI as above; attitude and position at M5 defaults (ZN applied only where well defined)",
+    "",
     "The rate loop's continuous-time characteristic tau s^2 + s + kp is stable for all",
     "kp > 0, so any finite rate-loop Ku is a discrete-delay/saturation artifact; it is",
     "reported as such and not hand-corrected.",
@@ -264,6 +274,11 @@ function main(): void {
         ultimate: { position: ultimate.position, attitude: ultimate.attitude, rate: ultimate.rate },
         reactionPID: { position: reaction.position, attitude: reaction.attitude, rate: reaction.rate },
         reactionPI: { position: reactionPi.position, attitude: reactionPi.attitude, rate: reactionPi.rate },
+        reactionPI_rateOnly: {
+          position: reactionPiRateOnly.position,
+          attitude: reactionPiRateOnly.attitude,
+          rate: reactionPiRateOnly.rate,
+        },
         curve: reaction.curve,
       },
       null,

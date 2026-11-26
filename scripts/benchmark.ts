@@ -37,6 +37,7 @@ const zn = JSON.parse(readFileSync("data/znGains.json", "utf8")) as {
   ultimate: Pick<ControllerParams, "position" | "attitude" | "rate">;
   reactionPID: Pick<ControllerParams, "position" | "attitude" | "rate">;
   reactionPI: Pick<ControllerParams, "position" | "attitude" | "rate">;
+  reactionPI_rateOnly: Pick<ControllerParams, "position" | "attitude" | "rate">;
 };
 const tuned = JSON.parse(readFileSync("data/tunedGains.json", "utf8")) as {
   vector: readonly number[];
@@ -49,6 +50,7 @@ const VARIANTS = [
   { label: "ZN ultimate-gain", params: { ...base, ...zn.ultimate } },
   { label: "ZN reaction-curve PID", params: { ...base, ...zn.reactionPID } },
   { label: "ZN reaction-curve PI", params: { ...base, ...zn.reactionPI } },
+  { label: "ZN reaction-curve PI (rate only)", params: { ...base, ...zn.reactionPI_rateOnly } },
   { label: "autotuned", params: withGains(base, tuned.vector) },
 ] as const;
 
@@ -161,7 +163,15 @@ async function main(): Promise<void> {
   await runJobs(jobs);
 
   const tunedIndex = VARIANTS.length - 1;
-  const csv = ["variant,scenario,seed,rms_m,rms_20_60,rms_90_120,overshoot_m,settling_s,ise,max_tilt_rad,saturation_steps,jitter,contact_steps"];
+  // A baseline that hard-fails has no valid RMS: it is printed as such and
+  // excluded from ratios and the geometric-mean headline entirely.
+  const valid = VARIANTS.map((_, variant) =>
+    [...SCENARIOS, ...SECONDARY].every((key) =>
+      HELD_OUT.every((seed) => results[variant]!.get(keyOf(variant, key, seed))!.failure === null),
+    ),
+  );
+  const INVALID_TEXT = "fails (no valid RMS)";
+  const csv = ["variant,scenario,seed,rms_m,rms_20_60,rms_90_120,overshoot_m,settling_s,ise,max_tilt_rad,saturation_steps,jitter,contact_steps,failure"];
   for (let variant = 0; variant < VARIANTS.length; variant++) {
     for (const key of [...SCENARIOS, ...SECONDARY]) {
       for (const seed of HELD_OUT) {
@@ -171,6 +181,7 @@ async function main(): Promise<void> {
           m.rms.toFixed(6), m.earlyRms.toFixed(6), m.lateRms.toFixed(6),
           m.overshoot.toFixed(6), m.settling.toFixed(4), m.ise.toFixed(6),
           m.maxTilt.toFixed(6), m.saturationSteps, m.jitter.toFixed(6), m.contactSteps,
+          m.failure ?? "",
         ].join(","));
       }
     }
@@ -181,6 +192,10 @@ async function main(): Promise<void> {
   console.log("| baseline | ratio | bootstrap 95% CI |");
   console.log("|---|---:|---:|");
   for (let baseIndex = 0; baseIndex < VARIANTS.length - 1; baseIndex++) {
+    if (!valid[baseIndex]) {
+      console.log(`| ${VARIANTS[baseIndex]!.label} | ${INVALID_TEXT} | excluded |`);
+      continue;
+    }
     const { ratio, ci } = headline(tunedIndex, baseIndex);
     console.log(`| ${VARIANTS[baseIndex]!.label} | ${ratio.toFixed(4)} | [${ci[0].toFixed(4)}, ${ci[1].toFixed(4)}] |`);
   }
@@ -189,6 +204,10 @@ async function main(): Promise<void> {
   console.log("| baseline | scenario | mean | SE | bootstrap CI | improved fraction |");
   console.log("|---|---|---:|---:|---:|---:|");
   for (let baseIndex = 0; baseIndex < VARIANTS.length - 1; baseIndex++) {
+    if (!valid[baseIndex]) {
+      console.log(`| ${VARIANTS[baseIndex]!.label} | all | ${INVALID_TEXT} | - | excluded | - |`);
+      continue;
+    }
     for (const key of SCENARIOS) {
       const differences = HELD_OUT.map((seed) =>
         results[tunedIndex]!.get(keyOf(tunedIndex, key, seed))!.rms -
@@ -210,6 +229,7 @@ async function main(): Promise<void> {
   console.log("|---|" + VARIANTS.map(() => "---:").join("|") + "|");
   for (const key of SCENARIOS) {
     const cells = VARIANTS.map((_, variant) => {
+      if (!valid[variant]) return INVALID_TEXT;
       const rows = HELD_OUT.map((seed) => results[variant]!.get(keyOf(variant, key, seed))!);
       return `${mean(rows.map((row) => row.rms)).toFixed(3)} / ${mean(rows.map((row) => row.earlyRms)).toFixed(3)} / ${mean(rows.map((row) => row.lateRms)).toFixed(3)}`;
     });
@@ -221,6 +241,10 @@ async function main(): Promise<void> {
   console.log("|---|---|---:|---:|---:|---:|---:|---:|---:|");
   for (let variant = 0; variant < VARIANTS.length; variant++) {
     for (const key of SECONDARY) {
+      if (!valid[variant]) {
+        console.log(`| ${VARIANTS[variant]!.label} | ${key} | ${INVALID_TEXT} | - | - | - | - | - | - |`);
+        continue;
+      }
       const rows = HELD_OUT.map((seed) => results[variant]!.get(keyOf(variant, key, seed))!);
       console.log(
         `| ${VARIANTS[variant]!.label} | ${key} | ${mean(rows.map((row) => row.overshoot)).toFixed(4)} | ` +

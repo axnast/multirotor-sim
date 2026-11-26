@@ -22,6 +22,7 @@ const zn = JSON.parse(readFileSync("data/znGains.json", "utf8")) as {
   ultimate: Pick<ControllerParams, "position" | "attitude" | "rate">;
   reactionPID: Pick<ControllerParams, "position" | "attitude" | "rate">;
   reactionPI: Pick<ControllerParams, "position" | "attitude" | "rate">;
+  reactionPI_rateOnly: Pick<ControllerParams, "position" | "attitude" | "rate">;
 };
 const baselines = createBaselineTable([DEV_SEEDS], config, base, FULL_STEPS);
 const suite = createCostSuite(config, base, FULL_STEPS, baselines);
@@ -31,6 +32,7 @@ const variants = [
   { label: "ZN ultimate-gain", params: { ...base, ...zn.ultimate } },
   { label: "ZN reaction-curve PID", params: { ...base, ...zn.reactionPID } },
   { label: "ZN reaction-curve PI", params: { ...base, ...zn.reactionPI } },
+  { label: "ZN reaction-curve PI (rate only)", params: { ...base, ...zn.reactionPI_rateOnly } },
 ];
 
 for (const variant of variants) {
