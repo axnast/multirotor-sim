@@ -4,9 +4,10 @@ import { defaultControllerParams } from "../src/core/control/controller";
 import { makeHex } from "../src/core/multirotor/config";
 import {
   COST_KEYS,
-  FAILURE_COST,
+  NONFINITE_COST,
   TERM_WEIGHTS,
   createCostSuite,
+  gradedPenalty,
 } from "../src/core/tuning/cost";
 import {
   DIMENSION,
@@ -78,7 +79,13 @@ describe("M6 tuning cost", () => {
     expect(suite.evaluate(bad, SEEDS).total).toBeGreaterThan(suite.evaluate(base, SEEDS).total);
   }, 30_000);
 
-  it("returns a finite penalty for hard failures", () => {
+  it("returns a finite, severity-ordered penalty for hard failures", () => {
+    expect(gradedPenalty(0)).toBe(100);
+    expect(gradedPenalty(0.1)).toBeGreaterThan(gradedPenalty(0));
+    expect(gradedPenalty(0.5)).toBeGreaterThan(gradedPenalty(0.1));
+    expect(gradedPenalty(0, true)).toBe(NONFINITE_COST);
+    expect(gradedPenalty(0.5)).toBeLessThan(NONFINITE_COST);
+
     // Very weak position/rate gains let the drone fall: ground contact in
     // flight is a hard failure in every scenario except +20% mass.
     const vector = [
@@ -87,7 +94,8 @@ describe("M6 tuning cost", () => {
     ];
     const result = suite.evaluate(withGains(base, vector), SEEDS);
     expect(Number.isFinite(result.total)).toBe(true);
-    expect(result.terms.some((term) => term.value === FAILURE_COST)).toBe(true);
+    expect(result.total).toBeGreaterThan(1);
+    expect(result.terms.some((term) => term.reason !== null)).toBe(true);
   }, 30_000);
 
   it("is deterministic for a fixed seed subset", () => {

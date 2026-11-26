@@ -35,10 +35,23 @@ import { assertFixedDefaults } from "./params";
 
 export const DT = 0.001;
 export const FULL_STEPS = 120_000;
-export const FAILURE_COST = 1e6;
 export const DEV_SEEDS = [1, 2, 3, 4, 5] as const;
-export const SATURATION_FAILURE_FRACTION = 0.2;
+/** Saturation is only a failure when sustained after the startup window. */
+export const SATURATION_THRESHOLD = 0.2;
+export const SUSTAINED_START_SECONDS = 5;
 export const DIVERGENCE_LIMIT = 100;
+/** Graded finite failure cost: 100*(1+excess), monotone in severity. */
+export const FAILURE_BASE_COST = 100;
+/** Non-finite states get a fixed value above every graded penalty. */
+export const NONFINITE_COST = 1_000;
+
+export function gradedPenalty(excess: number, nonfinite = false): number {
+  if (nonfinite) return NONFINITE_COST;
+  if (!Number.isFinite(excess) || excess < 0) {
+    throw new RangeError("failure excess must be a finite non-negative number");
+  }
+  return FAILURE_BASE_COST * (1 + excess);
+}
 
 export type CostKey =
   | "step"
@@ -110,7 +123,12 @@ export interface RolloutMetrics {
   readonly saturationSteps: number;
   readonly contactSteps: number;
   readonly jitter: number;
+  /** Sustained mixer-saturation fraction over t >= 5 s. */
+  readonly sustainedSaturation: number;
   readonly failure: string | null;
+  /** Severity used by `gradedPenalty` when `failure` is non-null. */
+  readonly excess: number;
+  readonly nonfinite: boolean;
 }
 
 function disturbance(
@@ -232,12 +250,16 @@ export function rollout(
   let overshoot = 0;
   let maxTilt = 0;
   let saturationSteps = 0;
+  let sustainedSteps = 0;
+  let sustainedSaturationSteps = 0;
   let contactSteps = 0;
   let jitterSum = 0;
   let jitterSumSquared = 0;
   let jitterCount = 0;
   let previousSpeeds: readonly number[] | null = null;
   let failure: string | null = null;
+  let excess = 0;
+  let nonfinite = false;
 
   for (let step = 0; step < steps; step++) {
     const time = step * DT;
@@ -250,13 +272,15 @@ export function rollout(
       override,
     );
     const position = result.state.body.position;
+    const velocity = result.state.body.velocity;
+    nonfinite = [...position, ...velocity].some((value) => !Number.isFinite(value));
     if (
-      position.some((value) => !Number.isFinite(value) || Math.abs(value) > DIVERGENCE_LIMIT) ||
-      result.state.body.velocity.some(
-        (value) => !Number.isFinite(value) || Math.abs(value) > DIVERGENCE_LIMIT,
-      )
+      nonfinite ||
+      position.some((value) => Math.abs(value) > DIVERGENCE_LIMIT) ||
+      velocity.some((value) => Math.abs(value) > DIVERGENCE_LIMIT)
     ) {
-      failure = "non-finite or divergent state";
+      failure = nonfinite ? "non-finite state" : "divergent state";
+      excess = (step + 1) / steps;
       break;
     }
 
@@ -295,7 +319,11 @@ export function rollout(
       }
     }
     maxTilt = Math.max(maxTilt, tiltOf(result.state));
-    if (result.lastMix.saturated) saturationSteps++;
+    if (result.lastMix.saturated) {
+      saturationSteps++;
+      if (nextTime >= SUSTAINED_START_SECONDS) sustainedSaturationSteps++;
+    }
+    if (nextTime >= SUSTAINED_START_SECONDS) sustainedSteps++;
     if (result.ground?.contacted) contactSteps++;
     if (nextTime >= 20 && previousSpeeds !== null) {
       for (let motor = 0; motor < result.state.motorSpeeds.length; motor++) {
@@ -309,15 +337,13 @@ export function rollout(
 
     if (!allowContact && result.ground?.contacted) {
       failure = "ground contact in flight";
+      excess = (step + 1) / steps;
       break;
     }
-    // Root cause of the earlier false failure: at step 0 a single saturated
-    // step gives fraction 1/1 > 20%. Require a 1000-step window before the
-    // running-fraction check; the final whole-run check below still applies.
-    if (step >= 999 && saturationSteps / (step + 1) > SATURATION_FAILURE_FRACTION) {
-      failure = "mixer saturation above 20% of steps";
-      break;
-    }
+    // Sustained saturation is measured over the WHOLE t>=5 s window, not
+    // stopped at the first crossing: early-stopping there would report a
+    // fraction of ~1 from only a handful of post-startup steps and destroy the
+    // severity gradient. NaN/Inf/divergence/contact still stop early above.
     state = {
       ...state,
       multirotor: result.state,
@@ -328,9 +354,14 @@ export function rollout(
     };
   }
 
-  if (failure === null && saturationSteps / steps > SATURATION_FAILURE_FRACTION) {
-    failure = "mixer saturation above 20% of steps";
+  if (failure === null && sustainedSteps > 0) {
+    const fraction = sustainedSaturationSteps / sustainedSteps;
+    if (fraction > SATURATION_THRESHOLD) {
+      failure = "sustained mixer saturation above 20% (t>=5 s)";
+      excess = fraction - SATURATION_THRESHOLD;
+    }
   }
+  const sustainedSaturation = sustainedSteps > 0 ? sustainedSaturationSteps / sustainedSteps : 0;
   const meanJitter = jitterCount > 0 ? jitterSum / jitterCount : 0;
   const jitterVariance =
     jitterCount > 1
@@ -348,7 +379,10 @@ export function rollout(
     saturationSteps,
     contactSteps,
     jitter: Math.sqrt(jitterVariance),
+    sustainedSaturation,
     failure,
+    excess,
+    nonfinite,
   };
 }
 
@@ -496,16 +530,15 @@ export function createCostSuite(
       const baseline = baselineFor(seeds);
       const terms: TermBreakdown[] = [];
       let logTotal = 0;
-      let hardFailure = false;
       for (const key of COST_KEYS) {
         const metrics = rollout(config, params, seeds[0]!, key, steps);
-        const failure =
+        const failed =
           metrics.failure !== null &&
           !(key === "mass20" && metrics.failure === "ground contact in flight");
-        const value = failure ? FAILURE_COST : normalizedValue(key, metrics, baseline.get(key)!);
-        if (failure) hardFailure = true;
-        // Floors are applied inside normalizedValue, before the log. A failed
-        // term is a finite 1e6 and makes the whole cost a finite 1e6.
+        // Graded finite penalty gives CMA-ES a slope out of failure regions.
+        const value = failed
+          ? gradedPenalty(metrics.excess, metrics.nonfinite)
+          : normalizedValue(key, metrics, baseline.get(key)!);
         logTotal += TERM_WEIGHTS[key] * Math.log(value);
         terms.push({
           key,
@@ -515,7 +548,7 @@ export function createCostSuite(
           reason: metrics.failure,
         });
       }
-      const total = hardFailure ? FAILURE_COST : Math.exp(logTotal);
+      const total = Math.exp(logTotal);
       return { total, terms, seeds: [...seeds] };
     },
   };

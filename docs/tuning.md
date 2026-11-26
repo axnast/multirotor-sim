@@ -11,7 +11,8 @@ changed after seeing held-out results.
    default is still exactly 1.000 and the objective matches the held-out
    headline. Weights (sum 1.00): light .08, moderate .10, gusty .12, strong .10,
    constant 5 m/s .08, mass20 .14, step .12, square .08, hoverJitter .06,
-   mismatchKTau .06, mismatchMass .06. Hard failures still return finite 1e6.
+   mismatchKTau .06, mismatchMass .06. Failures use the graded finite penalty
+   (amendment 8), never 1e6.
 2. The ZN position loop is **not applicable**: a P-only loop on a double
    integrator has no finite ultimate gain (the plant contributes −180° only at
    zero frequency), so no Ku/Tu exists and the default position gains are kept.
@@ -44,8 +45,36 @@ changed after seeing held-out results.
    off, ZN ultimate-gain, ZN reaction-curve PID, ZN reaction-curve PI,
    ZN reaction-curve PI (rate only), autotuned. A baseline that hard-fails in
    any scenario is printed as **"fails (no valid RMS)"** and excluded from all
-   ratios and the geometric-mean headline; its 1e6 cost penalty is never used
-   as if it were an RMS value.
+   ratios and the geometric-mean headline.
+8. The hard-failure rule now measures **sustained** mixer saturation: the
+   fraction of steps saturated over `t >= 5 s`, with the startup window
+   excluded from both numerator and denominator, failing above 20%. Ground
+   contact (except +20% mass), NaN/Inf and divergence remain failures. The
+   constant 1e6 term penalty is replaced by a graded finite
+   `100 * (1 + excess)`, where `excess` is the fraction by which sustained
+   saturation exceeds 20% or the fraction of the run completed before
+   contact/divergence; non-finite states use a fixed finite 1000. This gives
+   CMA-ES a monotone slope out of failure regions. Sustained saturation is
+   measured over the whole `t >= 5 s` window (no early stop on that check:
+   stopping at the first crossing would report ~1.0 from a handful of steps and
+   destroy the gradient); NaN/Inf/divergence/contact still stop early.
+
+**Startup-burst diagnosis (PI variant, dev seed 1):** the ZN attitude P gain
+(44.95) turns small noisy attitude errors into desired rates up to ~2 rad/s in
+the first second; the rate PID then demands ~0.94 N·m of torque and drives one
+motor group to 0 rad/s while the other reaches 780–844 rad/s. The rate
+integrators stay near 0.001–0.02 (no windup), and after the initial second the
+mixer stops saturating (whole-run fraction only ~0.005). This is why the
+sustained rule, not the old cumulative-from-t=0 rule, is the right criterion.
+
+**Yaw-authority reconciliation:** the earlier 0.90 N·m figure summed
+`kQ·ω_max²` over all six motors without the thrust constraint and is wrong.
+Computed from `mixDetailed`: at hover thrust 14.715 N the maximum feasible
+`τ_z` is **0.2207 N·m** (2.354 rad/s² on Izz = 0.09375); with thrust free the
+maximum is **0.4500 N·m at 30 N** (4.800 rad/s²). The hand calculation
+`0.015 m × 6 × 2.453 N ≈ 0.221 N·m` matches. The controller's own yaw
+acceleration limit is 1.8835 rad/s² ≈ 0.1766 N·m, so the ZN torque demand is
+far beyond the available yaw authority.
 
 ## Scope and fixed controller structure
 
@@ -127,12 +156,13 @@ floor)`, so a floor-dominated default still scores exactly **1.000**. Floors:
 overshoot 2%, settling 0.5 s, ISE 1e-6, RMS 1e-4, contact 1 s, jitter 1e-6,
 applied **before** the log. The objective is the weighted **geometric** mean
 `exp(Σ w_i ln(term_i / default_i))`, matching the pre-registered held-out
-headline; any hard failure still makes the total the finite **1e6**. The
+headline; any hard failure uses the graded finite penalty of amendment 8. The
 measured default cost is **1.000000000000** on dev seeds 1–5.
 
-Hard failures return the finite penalty **1e6** with a logged reason: non-finite
-or divergent state (|x| or |v| > 100), ground contact in flight, mixer
-saturation above 20% of steps. A single rollout may stop early on failure.
+Hard failures use the graded finite penalty `100*(1+excess)` (non-finite states
+1000) with a logged reason: non-finite or divergent state (|x| or |v| > 100),
+ground contact in flight, or **sustained** mixer saturation above 20% of steps
+over `t >= 5 s`. A single rollout may stop early on failure.
 **Exception:** ground contact in the +20% mass scenario is a continuous cost
 term (the default touches down around 4 s), never a failure. The default gains
 pass every scenario.
