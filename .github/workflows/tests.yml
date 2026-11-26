@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -20,9 +21,23 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - name: Slow seeded suites (one Node version)
-        if: ${{ matrix.node-version == 22 }}
-        run: npm run test:slow
       - name: Build viewer (one Node version)
         if: ${{ matrix.node-version == 22 }}
         run: npm run build
+
+  # Slow seeded suites are a separate signal: the fast matrix stays the main
+  # check, and this job only runs for main pushes and manual dispatch.
+  slow:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:slow
