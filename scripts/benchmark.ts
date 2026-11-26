@@ -35,7 +35,8 @@ const config = makeHex({ groundPlane: true });
 const base = defaultControllerParams(config);
 const zn = JSON.parse(readFileSync("data/znGains.json", "utf8")) as {
   ultimate: Pick<ControllerParams, "position" | "attitude" | "rate">;
-  reaction: Pick<ControllerParams, "position" | "attitude" | "rate">;
+  reactionPID: Pick<ControllerParams, "position" | "attitude" | "rate">;
+  reactionPI: Pick<ControllerParams, "position" | "attitude" | "rate">;
 };
 const tuned = JSON.parse(readFileSync("data/tunedGains.json", "utf8")) as {
   vector: readonly number[];
@@ -46,7 +47,8 @@ const VARIANTS = [
   { label: "M5 default", params: base },
   { label: "gate off (reference)", params: { ...base, position: { ...base.position, integralSeparation: 1e9 } } },
   { label: "ZN ultimate-gain", params: { ...base, ...zn.ultimate } },
-  { label: "ZN reaction-curve", params: { ...base, ...zn.reaction } },
+  { label: "ZN reaction-curve PID", params: { ...base, ...zn.reactionPID } },
+  { label: "ZN reaction-curve PI", params: { ...base, ...zn.reactionPI } },
   { label: "autotuned", params: withGains(base, tuned.vector) },
 ] as const;
 

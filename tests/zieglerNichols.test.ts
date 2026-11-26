@@ -6,6 +6,7 @@ import {
   reactionCurve,
   znPi,
   znPid,
+  znReactionPi,
   znReactionPid,
 } from "../src/core/tuning/zieglerNichols";
 
@@ -79,5 +80,7 @@ describe("Ziegler-Nichols helpers", () => {
     expect(znPid(4, 0.5)).toEqual({ kp: 2.4, ki: 9.6, kd: 0.15 });
     expect(znPi(4, 0.5).kp).toBeCloseTo(1.8, 12);
     expect(znReactionPid(4, 0.05).kp).toBeCloseTo(6, 12);
+    expect(znReactionPi(4, 0.05).kp).toBeCloseTo(4.5, 12);
+    expect(znReactionPi(4, 0.05).kd).toBe(0);
   });
 });

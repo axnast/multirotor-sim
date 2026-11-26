@@ -157,19 +157,21 @@ function initialState(config: MultirotorConfig): MultirotorState {
   };
 }
 
-function paramsFor(key: CostKey, seed: number): DisturbanceParams {
+function paramsFor(key: CostKey, seed: number, sensors = true): DisturbanceParams {
   if (key === "mass20") {
     return disturbance("calm", seed, {
+      sensors,
       payload: { atTime: 0, payload: PAYLOAD_MASS_20PCT },
     });
   }
   if (key === "mismatchMass") {
     return disturbance("calm", seed, {
+      sensors,
       payload: { atTime: 0, payload: { mass: 0.15, position: [0, 0, 0] } },
     });
   }
   if (key === "constant5") {
-    const calm = disturbance("calm", seed);
+    const calm = disturbance("calm", seed, { sensors });
     return {
       ...calm,
       wind: { ...calm.wind, enabled: true, mean: [5, 0, 0], gustSigma: [0, 0, 0] },
@@ -180,7 +182,7 @@ function paramsFor(key: CostKey, seed: number): DisturbanceParams {
     key === "mismatchKTau"
       ? "calm"
       : key;
-  return disturbance(scenario, seed);
+  return disturbance(scenario, seed, { sensors });
 }
 
 function overrideFor(key: CostKey): PlantOverride | null {
@@ -196,8 +198,9 @@ export function rollout(
   key: CostKey,
   steps: number,
   extraOverride: PlantOverride | null = null,
+  sensors = true,
 ): RolloutMetrics {
-  const disturbanceParams = paramsFor(key, seed);
+  const disturbanceParams = paramsFor(key, seed, sensors);
   const active =
     disturbanceParams !== null && isDisturbanceActive(disturbanceParams)
       ? disturbanceParams
@@ -308,7 +311,10 @@ export function rollout(
       failure = "ground contact in flight";
       break;
     }
-    if (saturationSteps / (step + 1) > SATURATION_FAILURE_FRACTION) {
+    // Root cause of the earlier false failure: at step 0 a single saturated
+    // step gives fraction 1/1 > 20%. Require a 1000-step window before the
+    // running-fraction check; the final whole-run check below still applies.
+    if (step >= 999 && saturationSteps / (step + 1) > SATURATION_FAILURE_FRACTION) {
       failure = "mixer saturation above 20% of steps";
       break;
     }

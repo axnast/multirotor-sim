@@ -25,6 +25,19 @@ changed after seeing held-out results.
    smoke-only horizon override). It is used solely to verify CLI/history/
    checkpoint/resume mechanics; it is not a tuning run and is never used for
    reported costs.
+5. A third ZN baseline, **ZN reaction-curve PI**, uses the classic PI rule for
+   the rate loop `Kp = 0.9/(R L), Ti = 3.33 L, Kd = 0`; attitude and position
+   are unchanged from the PID variant. Benchmark baselines are now: M3 gate,
+   M5 default, gate off, ZN ultimate-gain, ZN reaction-curve PID,
+   ZN reaction-curve PI, autotuned. A bug in the running saturation-fraction
+   check (a single saturated step at step 0 gives 1/1 > 20%) was fixed with a
+   1000-step warm-up; the whole-run check still applies. This is a root-cause
+   bug fix, not a tolerance change.
+6. The extension rule now uses **fixed dev-seed 1–5 re-scores of the incumbent
+   best candidate at generations 60 and 75**, because rotating-subset in-run
+   costs are not comparable across generations. Extend to 1000 only if
+   `(cost60 - cost75)/cost60 > 0.02`; held-out seeds are never consulted. The
+   history CSV logs both re-scores.
 
 ## Scope and fixed controller structure
 
@@ -74,8 +87,9 @@ is **on** at `DEFAULT_SENSOR_PARAMS` sigmas and the realistic 6S pack sag is
 scored under these identical conditions:
 (1) M3 gate (`integralDwell = 0`, default gains), (2) M5 default (release on),
 (3) gate off (`integralSeparation = 1e9`, reference only), (4) ZN ultimate-gain,
-(5) ZN reaction-curve, (6) autotuned. Every baseline number that differs from
-the README noise-off table is reported; that section is updated later.
+(5) ZN reaction-curve PID, (6) ZN reaction-curve PI, (7) autotuned. Every
+baseline number that differs from the README noise-off table is reported; that
+section is updated later.
 
 ## Cost function (`src/core/tuning/cost.ts`)
 
@@ -139,11 +153,12 @@ bit-identical (tested).
 
 Budget: **750 evaluations** (~75 generations), **8 workers** (measured best on
 this 6-core/12-thread laptop: 3.66× speedup; 12 workers degrade to 3.41×).
-Pre-registered extension rule (dev-seed cost only, held-out never consulted):
-extend to **1000** evaluations only if the best dev-seed cost improved by more
-than **2% over the last 15 generations**; otherwise stop at 750. Single-rollout
-early stop on hard failure is allowed. Final evaluation count and learning curve
-are in `out/autotune_history.csv`.
+Pre-registered extension rule (pre-run amendment): re-score the incumbent best
+candidate on the **fixed full dev seeds 1–5** at generations **60 and 75**;
+extend to **1000** only if the 75-vs-60 cost improved by **more than 2%**.
+Rotating-subset in-run costs are not comparable across generations; held-out
+seeds are never consulted. Single-rollout early stop on hard failure is allowed.
+The history CSV logs `rescore_generation,rescore_dev_cost` at those two points.
 
 Measured full-length noisy cost: **45.37 s/evaluation** single-threaded after
 baseline caching (93.59 s including baseline computation). At 8 workers:
@@ -162,12 +177,22 @@ crosses 1 (decaying below, growing above). Safety caps on every sweep.
   P-only with the ZN rate loop closed, position P-only with both inner loops
   closed. Classic rules: PID `Kp=0.6 Ku, Ti=0.5 Tu, Td=0.125 Tu` for rate; PI
   `Kp=0.45 Ku, Ti=0.83 Tu` for attitude and position (position kd unchanged).
-- **ZN reaction-curve** for the rate loop: the continuous-time rate plant
+- **ZN reaction-curve PID** for the rate loop: the continuous-time rate plant
   `τ s² + s + kp` is stable for all kp > 0 (integrator plus motor lag), so an
   ultimate-gain sweep can only find discrete-delay/saturation artifacts. Measure
   the open-loop step response slope `R` and apparent dead time `L` (tangent at
   steepest slope), then `Kp=1.2/(R L), Ti=2L, Td=0.5L`. Attitude/position use
   ultimate gain where finite, reaction curve otherwise; the choice is logged.
+- **ZN reaction-curve PI**: same R/L and attitude/position, rate loop
+  `Kp=0.9/(R L), Ti=3.33 L, Kd=0` (classic PI rule, no derivative). This is the
+  third labelled baseline; neither variant is hand-tuned.
+
+Diagnosis of the reaction-curve PID failure: the saturation comes from the
+**pitch and yaw axes** — the ZN attitude P gain (tilt=yaw ≈ 44.95) demands rate
+commands far above the fixed yaw-rate limit (1.2 rad/s) and yaw acceleration
+limit (1.88 rad/s²). With the default attitude gains the rate loop does not
+saturate. It is **not derivative-noise amplification**: removing kd (PI variant)
+does not help, and the PID variant still saturates with sensor noise off.
 
 Neither variant is hand-tuned; a poor or unstable result is reported as the
 baseline. Full Ku/Tu/R/L and gains: `out/zn_log.md`, `data/znGains.json`.

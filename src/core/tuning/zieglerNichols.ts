@@ -236,3 +236,9 @@ export function znReactionPid(slope: number, deadTime: number): ZngPid {
   const kp = 1.2 / (slope * deadTime);
   return { kp, ki: kp / (2 * deadTime), kd: kp * (0.5 * deadTime) };
 }
+
+/** Classic reaction-curve PI rule (no derivative) for the rate loop. */
+export function znReactionPi(slope: number, deadTime: number): ZngPid {
+  const kp = 0.9 / (slope * deadTime);
+  return { kp, ki: kp / (3.33 * deadTime), kd: 0 };
+}

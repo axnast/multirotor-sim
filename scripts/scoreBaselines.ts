@@ -20,7 +20,8 @@ const config = makeHex({ groundPlane: true });
 const base = defaultControllerParams(config);
 const zn = JSON.parse(readFileSync("data/znGains.json", "utf8")) as {
   ultimate: Pick<ControllerParams, "position" | "attitude" | "rate">;
-  reaction: Pick<ControllerParams, "position" | "attitude" | "rate">;
+  reactionPID: Pick<ControllerParams, "position" | "attitude" | "rate">;
+  reactionPI: Pick<ControllerParams, "position" | "attitude" | "rate">;
 };
 const baselines = createBaselineTable([DEV_SEEDS], config, base, FULL_STEPS);
 const suite = createCostSuite(config, base, FULL_STEPS, baselines);
@@ -28,7 +29,8 @@ const suite = createCostSuite(config, base, FULL_STEPS, baselines);
 const variants = [
   { label: "M5 default", params: base },
   { label: "ZN ultimate-gain", params: { ...base, ...zn.ultimate } },
-  { label: "ZN reaction-curve", params: { ...base, ...zn.reaction } },
+  { label: "ZN reaction-curve PID", params: { ...base, ...zn.reactionPID } },
+  { label: "ZN reaction-curve PI", params: { ...base, ...zn.reactionPI } },
 ];
 
 for (const variant of variants) {

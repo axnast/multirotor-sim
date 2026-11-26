@@ -34,6 +34,7 @@ import {
   reactionCurve,
   znPi,
   znPid,
+  znReactionPi,
   znReactionPid,
   type UltimateGain,
 } from "../src/core/tuning/zieglerNichols";
@@ -138,6 +139,7 @@ interface Variant {
   readonly rate: ControllerParams["rate"];
   readonly attitude: ControllerParams["attitude"];
   readonly position: ControllerParams["position"];
+  readonly curve: { slope: number; deadTime: number } | null;
   readonly log: string[];
 }
 
@@ -145,6 +147,7 @@ function identify(useReactionRate: boolean): Variant {
   const log: string[] = [];
   let rate: ControllerParams["rate"];
   let rateLine: string;
+  let curve: { slope: number; deadTime: number } | null = null;
 
   if (useReactionRate) {
     const alphaStep = 0.05;
@@ -156,7 +159,8 @@ function identify(useReactionRate: boolean): Variant {
       core = { ...core, multirotor: result.state };
       samples.push(result.state.body.angularVelocity[0]);
     }
-    const curve = reactionCurve(samples, DT, alphaStep);
+    const measured = reactionCurve(samples, DT, alphaStep);
+    curve = { slope: measured.slope, deadTime: measured.deadTime };
     const gains = znReactionPid(curve.slope, curve.deadTime);
     rate = { ...base.rate, gains };
     rateLine = `reaction curve: R=${curve.slope.toFixed(4)} s^-2 per s^-2, ` +
@@ -212,12 +216,19 @@ function identify(useReactionRate: boolean): Variant {
         ? " -> kept default position gains"
         : ` -> Kp=${positionGains.kp.toFixed(4)}, Ki=${positionGains.ki.toFixed(4)}, kd unchanged`),
   );
-  return { rate, attitude, position, log };
+  return { rate, attitude, position, curve, log };
 }
 
 function main(): void {
   const ultimate = identify(false);
   const reaction = identify(true);
+  if (reaction.curve === null) throw new Error("reaction curve was not measured");
+  const piGains = znReactionPi(reaction.curve.slope, reaction.curve.deadTime);
+  const reactionPi = {
+    rate: { ...base.rate, gains: piGains },
+    attitude: reaction.attitude,
+    position: reaction.position,
+  };
   const lines = [
     "# Ziegler-Nichols identification",
     "",
@@ -228,8 +239,13 @@ function main(): void {
     "## ZN ultimate-gain",
     ...ultimate.log,
     "",
-    "## ZN reaction-curve",
+    "## ZN reaction-curve PID",
     ...reaction.log,
+    "",
+    "## ZN reaction-curve PI",
+    `rate: R=${reaction.curve.slope.toFixed(4)}, L=${reaction.curve.deadTime.toFixed(4)} s; ` +
+      `Kp=${piGains.kp.toFixed(4)}, Ti=${(3.33 * reaction.curve.deadTime).toFixed(4)} s, Kd=0; ` +
+      "attitude/position as in the PID variant",
     "",
     "The rate loop's continuous-time characteristic tau s^2 + s + kp is stable for all",
     "kp > 0, so any finite rate-loop Ku is a discrete-delay/saturation artifact; it is",
@@ -246,7 +262,9 @@ function main(): void {
         version: 1,
         dt: DT,
         ultimate: { position: ultimate.position, attitude: ultimate.attitude, rate: ultimate.rate },
-        reaction: { position: reaction.position, attitude: reaction.attitude, rate: reaction.rate },
+        reactionPID: { position: reaction.position, attitude: reaction.attitude, rate: reaction.rate },
+        reactionPI: { position: reactionPi.position, attitude: reactionPi.attitude, rate: reactionPi.rate },
+        curve: reaction.curve,
       },
       null,
       2,

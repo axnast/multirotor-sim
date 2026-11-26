@@ -76,6 +76,9 @@ interface HistoryRow {
   readonly best: number;
   readonly sigma: number;
   readonly seeds: readonly number[];
+  /** Fixed dev-seed 1-5 re-scores at generations 60 and 75 (extension rule). */
+  readonly rescoreGeneration: number | null;
+  readonly rescoreCost: number | null;
 }
 
 function makePool(baselineTable: BaselineTable, steps: number): {
@@ -119,11 +122,16 @@ function makePool(baselineTable: BaselineTable, steps: number): {
   };
 }
 
+/**
+ * Pre-run amendment: in-run costs use rotating seed subsets and are not
+ * comparable across generations. Only the fixed dev-seed 1-5 re-scores of the
+ * incumbent at generations 60 and 75 decide the extension.
+ */
 function extensionAllowed(history: readonly HistoryRow[]): boolean {
-  if (history.length < 16) return false;
-  const current = history[history.length - 1]!.best;
-  const previous = history[history.length - 16]!.best;
-  return previous > 0 && (previous - current) / previous > 0.02;
+  const at60 = history.find((row) => row.rescoreGeneration === 60)?.rescoreCost;
+  const at75 = history.find((row) => row.rescoreGeneration === 75)?.rescoreCost;
+  if (at60 === undefined || at75 === undefined || at60 === null || at75 === null) return false;
+  return at60 > 0 && (at60 - at75) / at60 > 0.02;
 }
 
 async function main(): Promise<void> {
@@ -138,6 +146,7 @@ async function main(): Promise<void> {
     STEPS,
   );
 
+  const suite = createCostSuite(config, base, STEPS, baselineTable);
   const bounds = {
     lower: GAIN_KEYS.map((key) => Math.log(GAIN_BOUNDS[key].lower)),
     upper: GAIN_KEYS.map((key) => Math.log(GAIN_BOUNDS[key].upper)),
@@ -145,19 +154,28 @@ async function main(): Promise<void> {
   const startVector = defaultsToVector(base);
   let state: CmaesState;
   let history: HistoryRow[] = [];
+  let incumbent: readonly number[] = startVector;
+  let incumbentCost = Infinity;
   if (MODE === "start" || !existsSync(CHECKPOINT)) {
     state = createState({ dimension: 9, seed: SEED, lambda: 10, bounds }, startVector);
-    writeFileSync(HISTORY, "generation,evaluations,best_inrun_cost,sigma,seeds\n");
+    writeFileSync(
+      HISTORY,
+      "generation,evaluations,best_inrun_cost,sigma,seeds,rescore_generation,rescore_dev_cost\n",
+    );
   } else {
     const saved = JSON.parse(readFileSync(CHECKPOINT, "utf8")) as {
       state: string;
       history: HistoryRow[];
+      incumbent?: readonly number[];
+      incumbentCost?: number;
     };
     state = deserializeState(saved.state);
     history = saved.history;
+    if (saved.incumbent !== undefined) incumbent = saved.incumbent;
+    if (saved.incumbentCost !== undefined) incumbentCost = saved.incumbentCost;
   }
   if (MODE === "extend" && !extensionAllowed(history)) {
-    console.log("extension rule not satisfied (<2% over 15 generations); stopping");
+    console.log("extension rule not satisfied (75 vs 60 fixed dev-seed re-score <= 2%); stopping");
     return;
   }
 
@@ -179,28 +197,51 @@ async function main(): Promise<void> {
     for (let index = 0; index < pending.candidates.length; index++) {
       candidates.push({ vector: pending.candidates[index]!, cost: results[index]!.total });
     }
+    for (let index = 0; index < results.length; index++) {
+      if (results[index]!.total < incumbentCost) {
+        incumbentCost = results[index]!.total;
+        incumbent = pending.candidates[index]!;
+      }
+    }
     state = tell(state, pending, results.map((result) => result.total));
+    let rescoreGeneration: number | null = null;
+    let rescoreCost: number | null = null;
+    if (state.generation === 60 || state.generation === 75) {
+      rescoreGeneration = state.generation;
+      rescoreCost = suite.evaluate(withGains(base, incumbent), DEV_SEEDS).total;
+    }
     const row: HistoryRow = {
       generation: state.generation,
       evaluations: state.evaluations,
       best: state.best?.f ?? Infinity,
       sigma: state.sigma,
       seeds,
+      rescoreGeneration,
+      rescoreCost,
     };
     history = [...history, row];
     appendFileSync(
       HISTORY,
-      `${row.generation},${row.evaluations},${row.best},${row.sigma},${seeds.join("|")}\n`,
+      `${row.generation},${row.evaluations},${row.best},${row.sigma},${seeds.join("|")},` +
+        `${rescoreGeneration ?? ""},${rescoreCost ?? ""}\n`,
     );
-    writeFileSync(CHECKPOINT, JSON.stringify({ state: serializeState(state), history }));
-    console.log(`gen ${row.generation} | evals ${row.evaluations} | best ${row.best.toFixed(6)} | sigma ${row.sigma.toExponential(2)}`);
+    writeFileSync(
+      CHECKPOINT,
+      JSON.stringify({ state: serializeState(state), history, incumbent, incumbentCost }),
+    );
+    console.log(
+      `gen ${row.generation} | evals ${row.evaluations} | best ${row.best.toFixed(6)} | ` +
+        `sigma ${row.sigma.toExponential(2)}` +
+        (rescoreCost === null ? "" : ` | fixed dev re-score ${rescoreCost.toFixed(6)}`),
+    );
   }
   pool.close();
 
   // Winner selection: full dev-seed 1-5 re-score of the top five, never the
   // in-run rotating-seed cost.
-  const suite = createCostSuite(config, base, STEPS, baselineTable);
-  const ranked = [...candidates].sort((a, b) => a.cost - b.cost).slice(0, 5);
+  const ranked = [...candidates, { vector: incumbent, cost: incumbentCost }]
+    .sort((a, b) => a.cost - b.cost)
+    .slice(0, 5);
   let bestEntry: { vector: readonly number[]; cost: number } | null = null;
   for (const entry of ranked) {
     const cost = suite.evaluate(withGains(base, entry.vector), DEV_SEEDS).total;
