@@ -4,7 +4,7 @@
  */
 
 import type { ControllerStepDetailedResult } from "../../core/control/controller";
-import type { Setpoint } from "../../core/control/types";
+import type { Measurement, Setpoint } from "../../core/control/types";
 import { quatToEulerZYX } from "../../core/math/quat";
 import type { Vec3 } from "../../core/math/vec3";
 import type { MultirotorState } from "../../core/multirotor/dynamics";
@@ -18,6 +18,8 @@ export interface TelemetrySample {
   /** Desired Euler angles in radians, from the cascade diagnostics. */
   readonly eulerSp: Vec3;
   readonly motorSpeeds: readonly number[];
+  /** What the controller actually saw, or null when sensors are disabled. */
+  readonly measuredPosition: Vec3 | null;
 }
 
 export interface TelemetryInput {
@@ -25,11 +27,12 @@ export interface TelemetryInput {
   readonly multirotor: MultirotorState;
   readonly setpoint: Setpoint;
   readonly last: ControllerStepDetailedResult | null;
+  readonly measurement?: Measurement | null;
 }
 
 /** Build a single sample without touching the simulation state. */
 export function makeTelemetrySample(input: TelemetryInput): TelemetrySample {
-  const { t, multirotor, setpoint, last } = input;
+  const { t, multirotor, setpoint, last, measurement } = input;
   const euler = quatToEulerZYX(multirotor.body.orientation);
   const eulerSp =
     last === null
@@ -50,5 +53,9 @@ export function makeTelemetrySample(input: TelemetryInput): TelemetrySample {
     euler,
     eulerSp,
     motorSpeeds: [...multirotor.motorSpeeds],
+    measuredPosition:
+      measurement === undefined || measurement === null
+        ? null
+        : [...measurement.position],
   };
 }

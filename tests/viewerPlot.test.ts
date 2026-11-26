@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlotFrame,
   unwrapDegrees,
+  type PlotCommandLine,
   type PlotPoint,
   type PlotSeries,
   type PlotSpec,
@@ -132,6 +133,23 @@ describe("pure plot model", () => {
     );
     expect(seriesLine(frame.commands, "#f87171").length).toBe(2);
     expect(frame.yRange.every(Number.isFinite)).toBe(true);
+  });
+
+  it("distinguishes dotted measured series from dashed setpoints", () => {
+    const frame = buildPlotFrame(
+      spec([
+        series([[0, 1], [1, 2]], { label: "x meas", color: "#fb7185", dotted: true }),
+        series([[0, 3], [1, 4]], { label: "x sp", color: "#60a5fa", dashed: true }),
+      ]),
+    );
+    const lines = frame.commands.filter(
+      (command): command is PlotCommandLine => command.type === "line",
+    );
+    const measured = lines.find((line) => line.stroke === "#fb7185");
+    const setpoint = lines.find((line) => line.stroke === "#60a5fa");
+    expect(measured?.dotted).toBe(true);
+    expect(measured?.dash).toBe(false);
+    expect(setpoint?.dash).toBe(true);
   });
 
   it("emits a legend and clip commands", () => {

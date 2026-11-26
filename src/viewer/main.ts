@@ -19,7 +19,13 @@ import { buildDroneModel, updateDrone } from "./scene/drone";
 import { createSetpointMarker } from "./scene/setpointMarker";
 import { createViewerScene } from "./scene/scene";
 import { createTrail, type TrailVisual } from "./scene/trail";
+import { createWindArrow } from "./scene/windArrow";
 import { bumplessKiChange as rescaleIntegrals } from "./sim/bumpless";
+import {
+  buildDisturbanceParams,
+  DEFAULT_VIEWER_DISTURBANCE,
+  type ViewerDisturbanceSettings,
+} from "./sim/disturbanceConfig";
 import { positionErrorM } from "./sim/metrics";
 import { MISSIONS } from "./sim/mission";
 import { ringToArray } from "./sim/ringBuffer";
@@ -31,7 +37,9 @@ import {
   setManualSetpoint,
   setPaused,
   setSpeed,
+  installPayload,
   stepOnce,
+  withDisturbance,
   withTrailCapacity,
   type SimulationPlant,
 } from "./sim/runner";
@@ -51,7 +59,10 @@ if (app === null) {
 const config = makeHex({ groundPlane: true });
 let params: ControllerParams = defaultControllerParams(config);
 let plant: SimulationPlant = { config, params };
-let state = createSimulation(plant, MISSIONS.hover);
+let settings: ViewerDisturbanceSettings = DEFAULT_VIEWER_DISTURBANCE;
+let state = createSimulation(
+  plant, MISSIONS.hover, undefined, buildDisturbanceParams(settings),
+);
 
 const viewer = createViewerScene(app);
 const drone = buildDroneModel(config);
@@ -62,6 +73,8 @@ let trail: TrailVisual = createTrail(state.trail.capacity);
 viewer.scene.add(trail.line);
 const marker = createSetpointMarker();
 viewer.scene.add(marker.group);
+const windArrow = createWindArrow();
+viewer.scene.add(windArrow.group);
 const legend = createAxisLegend(app);
 const cameraRig = createCameraRig(
   viewer.camera,
@@ -162,6 +175,14 @@ const controls: ControlsView = createControls(app, params, {
     plant = { config, params };
     controls.setParams(params);
   },
+  onDisturbance(next): void {
+    settings = next;
+    state = withDisturbance(state, plant, buildDisturbanceParams(next));
+  },
+  onPayload(payload): void {
+    settings = { ...settings, payload };
+    state = installPayload(state, plant, buildDisturbanceParams(settings));
+  },
 });
 
 const hud = createHud(app);
@@ -214,6 +235,7 @@ viewer.renderer.setAnimationLoop((timeMs: number): void => {
   updateDrone(drone, state.multirotor, state.paused ? 0 : realDt * state.speed);
   trail.update(ringToArray(state.trail));
   marker.update(state.setpoint, timeMs / 1000);
+  windArrow.update(state.diagnostics?.wind ?? null, drone.group.position);
   cameraRig.update(drone.group.position, realDt, follow);
 
   // Status line and HUD read the same state sample from the same throttled

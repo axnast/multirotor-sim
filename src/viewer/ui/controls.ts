@@ -1,6 +1,18 @@
 /** DOM control panel: missions, playback, waypoint, camera and gain sliders. */
 
 import type { ControllerParams, Setpoint } from "../../core/control/types";
+import { PAYLOAD_LARGE_STRESS } from "../../core/disturbance/payload";
+import {
+  SCENARIOS,
+  SCENARIO_IDS,
+  type ScenarioId,
+} from "../../core/disturbance/scenario";
+import type { PayloadSpec } from "../../core/disturbance/types";
+import {
+  DEFAULT_VIEWER_DISTURBANCE,
+  type ViewerDisturbanceSettings,
+  type ViewerPackId,
+} from "../sim/disturbanceConfig";
 import { MISSIONS, type Mission, type MissionId } from "../sim/mission";
 import {
   PARAM_GROUPS,
@@ -21,6 +33,8 @@ export interface ControlCallbacks {
   onTrailCapacity(capacity: number): void;
   onSlider(id: ParamKey, value: number): void;
   onResetGains(): void;
+  onDisturbance(settings: ViewerDisturbanceSettings): void;
+  onPayload(payload: PayloadSpec | null): void;
 }
 
 export interface ControlsView {
@@ -33,6 +47,7 @@ export interface ControlsView {
   setParams(params: ControllerParams): void;
   setWaypoint(setpoint: Setpoint): void;
   getWaypointInputs(): { readonly altitude: number; readonly yawRadians: number };
+  setDisturbance(settings: ViewerDisturbanceSettings): void;
   setStatus(text: string): void;
 }
 
@@ -198,6 +213,147 @@ function createControls(
   camera.append(followLabel, axesLabel, trailLabel);
   element.appendChild(camera);
 
+  let settings: ViewerDisturbanceSettings = { ...DEFAULT_VIEWER_DISTURBANCE };
+
+  const disturbances = document.createElement("section");
+  disturbances.innerHTML =
+    "<h2>Disturbances</h2><p class='hint'>All off keeps the pre-M5 bit-identical " +
+    "path. Scenario, seed and toggles restart the disturbance streams; Drop " +
+    "payload keeps the flight and the running streams.</p>";
+
+  const scenarioLabel = document.createElement("label");
+  scenarioLabel.className = "select-row";
+  scenarioLabel.appendChild(document.createTextNode("Scenario"));
+  const scenarioSelect = document.createElement("select");
+  for (const id of SCENARIO_IDS) {
+    const option = document.createElement("option");
+    option.value = id;
+    const spec = SCENARIOS[id];
+    option.textContent = `${spec.name} (${spec.meanSpeed}/${spec.gustSigma} m/s)`;
+    scenarioSelect.appendChild(option);
+  }
+  scenarioSelect.addEventListener("change", () => {
+    settings = { ...settings, scenario: scenarioSelect.value as ScenarioId };
+    callbacks.onDisturbance(settings);
+  });
+  scenarioLabel.appendChild(scenarioSelect);
+
+  const seedRow = document.createElement("label");
+  seedRow.className = "number-row";
+  seedRow.appendChild(document.createTextNode("Seed"));
+  const seedInput = document.createElement("input");
+  seedInput.type = "number";
+  seedInput.min = "0";
+  seedInput.max = "4294967295";
+  seedInput.step = "1";
+  seedInput.addEventListener("change", () => {
+    const parsed = Math.floor(Number(seedInput.value));
+    const seed = Number.isFinite(parsed)
+      ? Math.min(0xffffffff, Math.max(0, parsed))
+      : DEFAULT_VIEWER_DISTURBANCE.seed;
+    seedInput.value = String(seed);
+    settings = { ...settings, seed };
+    callbacks.onDisturbance(settings);
+  });
+  seedRow.appendChild(seedInput);
+
+  const sensorInput = document.createElement("input");
+  sensorInput.type = "checkbox";
+  const sensorLabel = document.createElement("label");
+  sensorLabel.className = "check-row";
+  sensorInput.addEventListener("change", () => {
+    settings = { ...settings, sensors: sensorInput.checked };
+    callbacks.onDisturbance(settings);
+  });
+  sensorLabel.append(sensorInput, document.createTextNode(" Sensor noise"));
+
+  const batteryInput = document.createElement("input");
+  batteryInput.type = "checkbox";
+  const batteryLabel = document.createElement("label");
+  batteryLabel.className = "check-row";
+  const setBatteryEnabled = (enabled: boolean): void => {
+    packSelect.disabled = !enabled;
+    socInput.disabled = !enabled;
+  };
+  batteryInput.addEventListener("change", () => {
+    settings = { ...settings, battery: batteryInput.checked };
+    setBatteryEnabled(batteryInput.checked);
+    callbacks.onDisturbance(settings);
+  });
+  batteryLabel.append(batteryInput, document.createTextNode(" Battery sag"));
+
+  const packRow = document.createElement("label");
+  packRow.className = "select-row";
+  packRow.appendChild(document.createTextNode("Battery pack"));
+  const packSelect = document.createElement("select");
+  for (const [id, label] of [
+    ["realistic", "Realistic (6S)"],
+    ["stress", "Stress (non-physical)"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = label;
+    packSelect.appendChild(option);
+  }
+  packSelect.addEventListener("change", () => {
+    settings = { ...settings, pack: packSelect.value as ViewerPackId };
+    callbacks.onDisturbance(settings);
+  });
+  packRow.appendChild(packSelect);
+
+  const socInput = document.createElement("input");
+  socInput.type = "range";
+  socInput.min = "0";
+  socInput.max = "100";
+  socInput.step = "5";
+  const socOutput = document.createElement("output");
+  const socRow = document.createElement("label");
+  socRow.className = "slider-row";
+  socInput.addEventListener("input", () => {
+    updateRangeFill(socInput);
+    socOutput.textContent = `${socInput.value}%`;
+    settings = { ...settings, stateOfCharge: Number(socInput.value) / 100 };
+    callbacks.onDisturbance(settings);
+  });
+  socRow.append(
+    Object.assign(document.createElement("span"), { textContent: "Start SoC" }),
+    socInput,
+    socOutput,
+  );
+
+  const payloadButton = makeButton(
+    "Drop payload",
+    "Apply PAYLOAD_LARGE_STRESS (0.3 kg, 2 cm COM) now",
+  );
+  payloadButton.className = "wide-button";
+  payloadButton.addEventListener("click", () => {
+    const payload: PayloadSpec | null =
+      settings.payload === null ? PAYLOAD_LARGE_STRESS : null;
+    applySettings({ ...settings, payload });
+    callbacks.onPayload(payload);
+  });
+
+  function applySettings(next: ViewerDisturbanceSettings): void {
+    settings = next;
+    scenarioSelect.value = next.scenario;
+    seedInput.value = String(next.seed);
+    sensorInput.checked = next.sensors;
+    batteryInput.checked = next.battery;
+    packSelect.value = next.pack;
+    socInput.value = String(Math.round(next.stateOfCharge * 100));
+    updateRangeFill(socInput);
+    socOutput.textContent = `${socInput.value}%`;
+    setBatteryEnabled(next.battery);
+    payloadButton.textContent = next.payload === null ? "Drop payload" : "Remove payload";
+    payloadButton.classList.toggle("active", next.payload !== null);
+  }
+
+  disturbances.append(
+    scenarioLabel, seedRow, sensorLabel, batteryLabel, packRow, socRow, payloadButton,
+  );
+  element.appendChild(disturbances);
+  applySettings(settings);
+
   const gains = document.createElement("section");
   gains.innerHTML = "<h2>Gains</h2>";
   const sliderInputs = new Map<ParamKey, HTMLInputElement>();
@@ -294,6 +450,9 @@ function createControls(
         altitude: Number(altitudeInput.value),
         yawRadians: (Number(yawInput.value) * Math.PI) / 180,
       };
+    },
+    setDisturbance(next: ViewerDisturbanceSettings): void {
+      applySettings(next);
     },
     setStatus(text: string): void {
       status.textContent = text;

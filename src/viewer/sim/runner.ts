@@ -270,6 +270,7 @@ export function stepOnce(
         multirotor: nextMultirotor,
         setpoint: nextSetpoint,
         last: command,
+        measurement: disturbed?.measurement ?? null,
       }),
     );
     trail = ringPush(trail, nextMultirotor.body.position);
@@ -388,6 +389,38 @@ export function withDisturbance(
     ...state,
     disturbanceParams: active,
     disturbance: active === null ? null : createDisturbanceState(active),
+    diagnostics: null,
+    trueConfig: plant.config,
+  };
+}
+
+/**
+ * Install or remove a payload mid-flight. `params.payload.atTime` is 0, and the
+ * existing disturbance clock is already past it, so the event fires on the next
+ * step. Unlike `withDisturbance`, this preserves the wind/sensor streams, and
+ * unlike a mission reset it preserves the flight state.
+ */
+export function installPayload(
+  state: SimulationState,
+  plant: SimulationPlant,
+  params: DisturbanceParams | null,
+): SimulationState {
+  const active = params !== null && isDisturbanceActive(params) ? params : null;
+  let disturbance: DisturbanceState | null = state.disturbance;
+  if (active === null) {
+    disturbance = null;
+  } else if (disturbance === null) {
+    disturbance = createDisturbanceState(active);
+  } else {
+    disturbance = {
+      ...disturbance,
+      payloadApplied: active.payload !== null && disturbance.payloadApplied,
+    };
+  }
+  return {
+    ...state,
+    disturbanceParams: active,
+    disturbance,
     diagnostics: null,
     trueConfig: plant.config,
   };

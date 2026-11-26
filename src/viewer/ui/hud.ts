@@ -20,6 +20,9 @@ export function createHud(parent: HTMLElement): HudView {
       <span>Position error</span><strong data-hud="error">0.00 m</strong>
       <span>Tilt (max)</span><strong data-hud="tilt">0.0° (0.0°)</strong>
       <span>Mixer</span><strong data-hud="mix">OK</strong>
+      <span>Wind</span><strong data-hud="wind">off</strong>
+      <span>Battery</span><strong data-hud="battery">off</strong>
+      <span>Plant sat.</span><strong data-hud="plant">OK</strong>
       <span>Ground</span><strong data-hud="ground">airborne</strong>
     </div>
   `;
@@ -34,6 +37,9 @@ export function createHud(parent: HTMLElement): HudView {
   const error = field("error");
   const tilt = field("tilt");
   const mix = field("mix");
+  const wind = field("wind");
+  const battery = field("battery");
+  const plant = field("plant");
   const ground = field("ground");
 
   return {
@@ -64,6 +70,28 @@ export function createHud(parent: HTMLElement): HudView {
         ? `SATURATED (${state.stats.saturationSteps})`
         : `OK (${state.stats.saturationSteps})`;
       mix.classList.toggle("bad", saturated);
+
+      const diagnostics = state.diagnostics;
+      const windVector = diagnostics?.wind;
+      const windSpeed =
+        windVector === undefined
+          ? 0
+          : Math.hypot(windVector[0], windVector[1], windVector[2]);
+      wind.textContent =
+        windVector !== undefined && windSpeed > 1e-6
+          ? `${windSpeed.toFixed(2)} m/s [${windVector.map((v) => v.toFixed(1)).join(", ")}]`
+          : "off";
+      const batteryOn = state.disturbanceParams?.battery.enabled === true;
+      battery.textContent =
+        diagnostics !== null && batteryOn
+          ? `${(diagnostics.stateOfCharge * 100).toFixed(0)}% · ${diagnostics.voltage.toFixed(2)} V`
+          : "off";
+      const plantSteps = state.stats.plantSaturationSteps;
+      const omegaScale = diagnostics?.maxOmegaScale ?? 1;
+      const limited = omegaScale < 1 - 1e-9 || plantSteps > 0;
+      plant.textContent = `${limited ? "LIMIT" : "OK"} (${plantSteps})`;
+      plant.classList.toggle("bad", limited);
+
       ground.textContent = state.contact ? "contact" : "airborne";
       ground.classList.toggle("bad", state.contact);
     },

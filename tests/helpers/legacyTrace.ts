@@ -22,6 +22,7 @@ import type {
   ControllerState,
   Setpoint,
 } from "../../src/core/control/types";
+import type { DisturbanceParams } from "../../src/core/disturbance/types";
 import { makeHex } from "../../src/core/multirotor/config";
 import {
   stepMultirotorDetailed,
@@ -141,13 +142,15 @@ export function runLegacyTrace(): M3Sample[] {
   return samples;
 }
 
-/** The same scenario through the viewer runner with all disturbances absent. */
-export function runRunnerTrace(): {
+/** The same scenario through the viewer runner, optionally with disturbances. */
+export function runRunnerTrace(
+  disturbance: DisturbanceParams | null = null,
+): {
   readonly samples: M3Sample[];
   readonly state: SimulationState;
 } {
   const plant = m3Plant();
-  let state = createSimulation(plant, MISSIONS.takeoff);
+  let state = createSimulation(plant, MISSIONS.takeoff, undefined, disturbance);
   const samples: M3Sample[] = [sampleOf(
     state.multirotor,
     state.controller,

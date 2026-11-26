@@ -1,4 +1,4 @@
-# Browser 3D viewer (Milestone 4)
+# Browser 3D viewer (Milestones 4–5)
 
 The viewer is a presentation layer over the unchanged simulator core. It runs
 the real `controllerStepDetailed` → `mixDetailed` → `stepMultirotorDetailed`
@@ -14,6 +14,8 @@ sequence and never re-implements physics or control.
 | Three.js scene, drone, camera, trail | `src/viewer/scene/` |
 | Pure plot model and canvas renderer | `src/viewer/plots/` |
 | DOM controls and HUD | `src/viewer/ui/` |
+| Pure disturbance settings builder | `src/viewer/sim/disturbanceConfig.ts` |
+| World-frame wind arrow | `src/viewer/scene/windArrow.ts` |
 
 `src/core` stays DOM-free and compiles under the original `tsconfig.json`.
 `tsconfig.viewer.json` adds DOM and `vite/client` for the viewer only; both
@@ -90,20 +92,33 @@ preserving the user's orbit offset.
 - Mission buttons, pause/step/reset, speed buttons (0.25×–4×).
 - Click the ground plane to command x/y; altitude (0–10 m) and yaw (−180°…180°)
   sliders set z and heading. Any manual change switches to Manual mode.
-- 18 gain sliders with visible values and units, grouped by loop, plus
-  **Reset gains to defaults**. `ki` changes rescale stored integrals by
+- 21 gain sliders with visible values and units, grouped by loop, plus
+  **Reset gains to defaults**. The integral separation, dwell, release guard and
+  trim-gain sliders are included. `ki` changes rescale stored integrals by
   `ki_old / ki_new` (`src/viewer/sim/bumpless.ts`), so `ki·integral` is
   preserved and live tuning is bumpless without changing core behaviour.
+- **Disturbances** section: scenario select (calm/light/moderate/gusty/strong),
+  seed, sensor-noise toggle, battery toggle with realistic/stress pack choice
+  and starting-SoC slider, and a **Drop payload** button that installs
+  `PAYLOAD_LARGE_STRESS` (and toggles to **Remove payload**). All defaults are
+  off, so the runner stays on the bit-identical pre-M5 path. Changing the
+  scenario, seed or toggles restarts the disturbance streams; dropping the
+  payload uses `installPayload()` and preserves the flight and running streams.
+  A payload installed before reset is installed again at t = 0 by the reset.
 - Plots are pure `buildPlotFrame(spec) → draw commands` (`plotModel.ts`); the
   canvas file only applies DPR and executes commands. Three canvases show
   position x/y/z, attitude roll/pitch/yaw and motor speeds, setpoint dashed
   versus actual solid, with auto-scaled axes, a legend and a 2/5/10 s window.
-  Yaw is unwrapped across ±180° so a shortest-path yaw command does not draw a
-  false vertical jump; this is unit tested.
+  When sensor noise is on, the position plot adds dotted measured-position
+  overlays (x/y/z) from the telemetry samples; the other two plots are
+  unchanged. Yaw is unwrapped across ±180° so a shortest-path yaw command does
+  not draw a false vertical jump; this is unit tested.
 - The HUD shows sim time, speed, position error, current/max tilt, mixer
-  saturation count and ground contact. The status line and HUD use the same
+  saturation count, world wind vector, battery SoC/voltage, plant saturation
+  count and ground contact. The status line and HUD use the same
   `positionErrorM` helper and the same throttled state sample, so they cannot
-  disagree by a frame.
+  disagree by a frame. An arrow in the 3D scene follows the drone and shows the
+  current wind vector; it is hidden when wind is off.
 
 ## Build and deployment
 
@@ -118,22 +133,28 @@ npm run preview  # serve dist/ locally
 Node 22. For a custom domain, set the base to `/` instead. To enable this, go
 to **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
-The separate `tests` workflow still runs typecheck and tests on Node 20/22/24,
-and additionally runs `npm run build` on Node 22 so a broken viewer is caught
-before deployment.
+The separate `tests` workflow still runs typecheck and the fast suite on Node
+20/22/24, plus `npm run build` on Node 22 so a broken viewer is caught before
+deployment. `npm run test:slow` runs in its own Node 22 job on pushes to `main`
+only, with a 25-minute timeout.
 
 ## Tests
 
 Node-only Vitest tests cover the fixed-step runner (determinism, accumulator,
 speed, cap, pause, reset, direct-core equivalence), coordinate conversion,
-ring buffer, bumpless gains, plot scaling and yaw unwrapping, slider specs,
-and the shared error metric. No browser is required.
+ring buffer, bumpless gains, plot scaling and yaw unwrapping (including dotted
+measured series), slider specs, the disturbance-settings builder, the mid-flight
+payload clock, and the shared error metric. The frozen M3 digest is also checked
+through the viewer's all-off disturbance settings. No browser is required.
 
 ## Limitations
 
 - Telemetry is sampled every 20 sim steps, not every render frame; at 4× the
   plotted window still represents sim time correctly.
 - Rotor spin is illustrative, not physical-rate accurate.
-- No sensors, wind, battery, autotuning or disturbances (M5–M6).
+- M5 disturbances are available in the viewer; no autotuner yet (M6).
+- Changing scenario/seed/toggles mid-flight restarts the disturbance streams:
+  the wind gust sequence and sensor PRNG are re-seeded, though the flight and
+  setpoint continue. The payload button deliberately does not restart them.
 - Follow mode smooths the target, so during very fast manoeuvres the drone can
   briefly lead the camera.

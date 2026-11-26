@@ -12,7 +12,7 @@ function drawCommand(ctx: CanvasRenderingContext2D, command: PlotCommand): void 
       if (command.points.length < 2) break;
       ctx.strokeStyle = command.stroke;
       ctx.lineWidth = command.lineWidth;
-      ctx.setLineDash(command.dash ? [4, 3] : []);
+      ctx.setLineDash(command.dotted ? [2, 3] : command.dash ? [4, 3] : []);
       ctx.beginPath();
       ctx.moveTo(command.points[0]![0], command.points[0]![1]);
       for (let index = 1; index < command.points.length; index++) {

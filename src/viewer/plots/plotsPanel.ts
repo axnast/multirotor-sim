@@ -26,8 +26,22 @@ function series(
   dashed: boolean,
   unwrap: boolean,
   points: readonly PlotPoint[],
+  dotted = false,
 ): PlotSeries {
-  return { id, label, color, dashed, unwrap, points };
+  return { id, label, color, dashed, dotted, unwrap, points };
+}
+
+/** Noisy measurement samples, only present while the sensor model is active. */
+function measuredPoints(
+  samples: readonly TelemetrySample[],
+  axis: 0 | 1 | 2,
+): readonly PlotPoint[] {
+  const points: PlotPoint[] = [];
+  for (const sample of samples) {
+    const measured = sample.measuredPosition;
+    if (measured !== null) points.push({ t: sample.t, value: measured[axis]! });
+  }
+  return points;
 }
 
 export interface PlotsPanel {
@@ -72,7 +86,7 @@ export function createPlotsPanel(
       const now = state.simTime;
       const windowSeconds = Number(windowSelect.value);
 
-      const positionSeries: readonly PlotSeries[] = [
+      const positionSeries: PlotSeries[] = [
         series("x", "x", "#f87171", false, false, pointsOf(samples, (s) => s.position[0])),
         series("y", "y", "#4ade80", false, false, pointsOf(samples, (s) => s.position[1])),
         series("z", "z", "#60a5fa", false, false, pointsOf(samples, (s) => s.position[2])),
@@ -80,6 +94,14 @@ export function createPlotsPanel(
         series("y sp", "y sp", "#86efac", true, false, pointsOf(samples, (s) => s.positionSp[1])),
         series("z sp", "z sp", "#93c5fd", true, false, pointsOf(samples, (s) => s.positionSp[2])),
       ];
+      if (state.disturbanceParams?.sensors.enabled === true) {
+        // Dotted measured position over solid true position, position plot only.
+        positionSeries.push(
+          series("x meas", "x meas", "#f87171", false, false, measuredPoints(samples, 0), true),
+          series("y meas", "y meas", "#4ade80", false, false, measuredPoints(samples, 1), true),
+          series("z meas", "z meas", "#60a5fa", false, false, measuredPoints(samples, 2), true),
+        );
+      }
       const attitudeSeries: readonly PlotSeries[] = [
         series("roll", "roll", "#f87171", false, false, pointsOf(samples, (s) => s.euler[0] * DEGREES)),
         series("pitch", "pitch", "#4ade80", false, false, pointsOf(samples, (s) => s.euler[1] * DEGREES)),

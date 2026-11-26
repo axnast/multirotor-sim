@@ -13,6 +13,8 @@ export interface PlotSeries {
   readonly label: string;
   readonly color: string;
   readonly dashed: boolean;
+  /** Dotted (2px/3px) rather than dashed; used for measured-position overlays. */
+  readonly dotted?: boolean;
   /** Unwrap degree-valued series across the ±180° boundary. */
   readonly unwrap: boolean;
   readonly points: readonly PlotPoint[];
@@ -44,6 +46,7 @@ export interface PlotCommandLine {
   readonly stroke: string;
   readonly lineWidth: number;
   readonly dash: boolean;
+  readonly dotted?: boolean;
 }
 
 export interface PlotCommandText {
@@ -260,8 +263,9 @@ export function buildPlotFrame(spec: PlotSpec): PlotFrame {
         type: "line",
         points: pixels,
         stroke: entry.series.color,
-        lineWidth: entry.series.dashed ? 1 : 1.6,
+        lineWidth: entry.series.dashed || entry.series.dotted ? 1 : 1.6,
         dash: entry.series.dashed,
+        dotted: entry.series.dotted ?? false,
       });
     }
   }
