@@ -52,11 +52,11 @@ import {
 } from "../src/core/multirotor/config";
 import {
   motorWrench,
-  stepMultirotorDetailed,
   type MultirotorState,
 } from "../src/core/multirotor/dynamics";
 import type { GroundContactResult } from "../src/core/multirotor/ground";
 import { mixDetailed, type Wrench } from "../src/core/multirotor/mixer";
+import { stepPlant } from "../src/core/simulation/loop";
 
 const DT = 1e-3;
 const STEPS = 10_000;
@@ -312,7 +312,7 @@ function runPhase(
 
     if (step === STEPS) break;
 
-    const result = stepMultirotorDetailed(state, spec.config, set.speeds, DT);
+    const result = stepPlant(state, spec.config, set.speeds, DT);
     validateStep(result.state, spec.config, result.ground);
     if (result.ground?.contacted) {
       contactSteps++;

@@ -7,27 +7,19 @@
  */
 
 import {
-  controllerStepDetailed,
   initialControllerState,
   type ControllerStepDetailedResult,
 } from "../../core/control/controller";
 import type {
-  ControllerParams,
   ControllerState,
-  Measurement,
   Setpoint,
 } from "../../core/control/types";
 import { quatRotateVector, type Quat } from "../../core/math/quat";
 import { vec3Length, vec3Sub, type Vec3 } from "../../core/math/vec3";
 import type { MultirotorConfig } from "../../core/multirotor/config";
-import {
-  STILL_AIR,
-  stepMultirotorDetailed,
-  type MultirotorState,
-} from "../../core/multirotor/dynamics";
+import type { MultirotorState } from "../../core/multirotor/dynamics";
 import {
   createDisturbanceState,
-  disturbanceStep,
   isDisturbanceActive,
 } from "../../core/disturbance/step";
 import type {
@@ -35,7 +27,12 @@ import type {
   DisturbanceParams,
   DisturbanceState,
 } from "../../core/disturbance/types";
-import { mixDetailed, type MixResult } from "../../core/multirotor/mixer";
+import { type MixResult } from "../../core/multirotor/mixer";
+import {
+  measurementOf,
+  simulateStep,
+  type SimulationPlant as CoreSimulationPlant,
+} from "../../core/simulation/loop";
 import {
   DEFAULT_MAX_STEPS_PER_FRAME,
   MAX_FRAME_SECONDS,
@@ -62,10 +59,8 @@ import {
 } from "./ringBuffer";
 import { makeTelemetrySample, type TelemetrySample } from "./telemetry";
 
-export interface SimulationPlant {
-  readonly config: MultirotorConfig;
-  readonly params: ControllerParams;
-}
+export type SimulationPlant = CoreSimulationPlant;
+export { measurementOf };
 
 export interface SimulationStats {
   readonly maxTiltRad: number;
@@ -115,16 +110,6 @@ export interface AdvanceResult {
 export function tiltAngleRad(orientation: Quat): number {
   const bodyZ = quatRotateVector(orientation, [0, 0, 1]);
   return Math.acos(Math.min(1, Math.max(-1, bodyZ[2])));
-}
-
-/** The true simulator state is the controller measurement for now. */
-export function measurementOf(state: MultirotorState): Measurement {
-  return {
-    position: state.body.position,
-    velocity: state.body.velocity,
-    orientation: state.body.orientation,
-    angularVelocity: state.body.angularVelocity,
-  };
 }
 
 function zeroStats(): SimulationStats {
@@ -193,51 +178,25 @@ export function stepOnce(
   state: SimulationState,
   plant: SimulationPlant,
 ): SimulationState {
-  // Disturbance boundary: the controller is given the corrupted measurement,
-  // the mixer and controller use the NOMINAL config/params, and only the plant
-  // sees `trueConfig` and the wind. When nothing is enabled this is a pure
-  // pass-through of the same objects, so the pre-M5 arithmetic is unchanged.
-  const disturbed =
-    state.disturbance !== null && state.disturbanceParams !== null
-      ? disturbanceStep(
-          state.disturbance,
-          state.disturbanceParams,
-          measurementOf(state.multirotor),
-          state.multirotor.motorSpeeds,
-          plant.config,
-          SIM_DT,
-        )
-      : null;
-  const command = controllerStepDetailed(
-    state.controller,
-    disturbed?.measurement ?? measurementOf(state.multirotor),
+  // All control/mixer/physics work lives in the shared core loop. The viewer
+  // only owns the mission timeline, stats and telemetry ring buffers.
+  const step = simulateStep(
+    {
+      multirotor: state.multirotor,
+      controller: state.controller,
+      disturbance: state.disturbance,
+      disturbanceParams: state.disturbanceParams,
+      diagnostics: state.diagnostics,
+      trueConfig: plant.config,
+    },
+    plant,
     state.setpoint,
-    plant.params,
     SIM_DT,
   );
-  const mixed = mixDetailed(plant.config, command.wrench);
-  const trueConfig = disturbed?.trueConfig ?? plant.config;
-  const environment = disturbed?.environment ?? STILL_AIR;
-  // A voltage drop can lower the ceiling below the rotors' current speed.
-  // The core state invariant forbids overspeed, so project onto the new
-  // ceiling before the step (documented as an instantaneous ESC limit).
-  const plantMultirotor =
-    disturbed !== null && disturbed.diagnostics.maxOmegaScale < 1
-      ? {
-          ...state.multirotor,
-          motorSpeeds: state.multirotor.motorSpeeds.map((omega, index) =>
-            Math.min(omega, trueConfig.motors[index]?.maxOmega ?? omega),
-          ),
-        }
-      : state.multirotor;
-  const result = stepMultirotorDetailed(
-    plantMultirotor,
-    trueConfig,
-    mixed.motorSpeeds,
-    SIM_DT,
-    environment,
-  );
-  const nextMultirotor = result.state;
+  const command = step.last;
+  const mixed = step.lastMix;
+  const trueConfig = step.trueConfig;
+  const nextMultirotor = step.state;
   const nextStepCount = state.stepCount + 1;
   const nextRuntime =
     state.mission === null ? null : advanceMission(state.mission);
@@ -257,7 +216,7 @@ export function stepOnce(
         omega > (trueConfig.motors[index]?.maxOmega ?? Infinity) + 1e-9,
       ) ? 1 : 0),
     saturationSteps: state.stats.saturationSteps + (mixed.saturated ? 1 : 0),
-    contactSteps: state.stats.contactSteps + (result.ground?.contacted ? 1 : 0),
+    contactSteps: state.stats.contactSteps + (step.ground?.contacted ? 1 : 0),
   };
 
   let telemetry = state.telemetry;
@@ -270,7 +229,7 @@ export function stepOnce(
         multirotor: nextMultirotor,
         setpoint: nextSetpoint,
         last: command,
-        measurement: disturbed?.measurement ?? null,
+        measurement: step.disturbedMeasurement,
       }),
     );
     trail = ringPush(trail, nextMultirotor.body.position);
@@ -280,8 +239,8 @@ export function stepOnce(
     ...state,
     multirotor: nextMultirotor,
     controller: command.state,
-    disturbance: disturbed?.state ?? state.disturbance,
-    diagnostics: disturbed?.diagnostics ?? state.diagnostics,
+    disturbance: step.disturbance,
+    diagnostics: step.diagnostics,
     trueConfig,
     mission: nextRuntime,
     setpoint: nextSetpoint,
@@ -289,7 +248,7 @@ export function stepOnce(
     simTime: nextStepCount * SIM_DT,
     last: command,
     lastMix: mixed,
-    contact: result.ground?.contacted ?? false,
+    contact: step.contact,
     stats,
     telemetry,
     trail,

@@ -11,7 +11,6 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 import {
-  controllerStep,
   defaultControllerParams,
   initialControllerState,
 } from "../src/core/control/controller";
@@ -23,11 +22,8 @@ import {
 } from "../src/core/math/quat";
 import { vec3Dot, vec3Length, vec3Scale, vec3Sub, type Vec3 } from "../src/core/math/vec3";
 import { makeHex, type MultirotorConfig } from "../src/core/multirotor/config";
-import {
-  stepMultirotorDetailed,
-  type MultirotorState,
-} from "../src/core/multirotor/dynamics";
-import { mixDetailed } from "../src/core/multirotor/mixer";
+import type { MultirotorState } from "../src/core/multirotor/dynamics";
+import { simulateStep } from "../src/core/simulation/loop";
 
 const DT = 1e-3;
 const LEG_STEPS = 20_000; // a 5 m step settles in about 15.2 s
@@ -109,22 +105,23 @@ function runPhase(
   let finalWindowMaxError = 0;
 
   for (let step = 0; step < phase.steps; step++) {
-    const command = controllerStep(
-      control,
+    const stepped = simulateStep(
       {
-        position: current.body.position,
-        velocity: current.body.velocity,
-        orientation: current.body.orientation,
-        angularVelocity: current.body.angularVelocity,
+        multirotor: current,
+        controller: control,
+        disturbance: null,
+        disturbanceParams: null,
+        diagnostics: null,
+        trueConfig: config,
       },
+      { config, params },
       phase.setpoint,
-      params,
       DT,
     );
-    control = command.state;
-    const mixed = mixDetailed(config, command.wrench);
-    const result = stepMultirotorDetailed(current, config, mixed.motorSpeeds, DT);
-    current = result.state;
+    const command = stepped.last;
+    const mixed = stepped.lastMix;
+    control = stepped.controller;
+    current = stepped.state;
 
     const position: Vec3 = current.body.position;
     const deviation = vec3Length(vec3Sub(position, phase.setpoint.position));
@@ -149,8 +146,8 @@ function runPhase(
       ...current.body.angularVelocity,
       ...command.wrench,
       mixed.saturated,
-      result.ground?.contacted ?? false,
-      result.ground?.normalImpulse ?? 0,
+      stepped.ground?.contacted ?? false,
+      stepped.ground?.normalImpulse ?? 0,
       ...current.motorSpeeds,
     ]));
   }

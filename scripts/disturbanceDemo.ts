@@ -6,7 +6,9 @@
  * across seeds. Runtime is roughly ten minutes (105 runs x 120k steps).
  *
  * Run with: npm run demo:disturbance
- * Output:   out/disturbance.csv
+ *           npm run demo:disturbance -- --quick  (3 seeds, short runs; for
+ *           before/after refactor hash comparisons)
+ * Output:   out/disturbance.csv / out/disturbance-quick.csv
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -22,11 +24,14 @@ import { makeHex } from "../src/core/multirotor/config";
 import { MISSIONS } from "../src/viewer/sim/mission";
 import { createSimulation, stepOnce } from "../src/viewer/sim/runner";
 
-const STEPS = 120_000;
+const QUICK = process.argv.includes("--quick");
+const STEPS = QUICK ? 6_000 : 120_000;
 const DT = 0.001;
-const SEEDS = [1, 2, 3, 4, 5] as const;
-const WINDOWS = [[20, 60], [90, 120]] as const;
-const OUTPUT_PATH = "out/disturbance.csv";
+const SEEDS = (QUICK ? [1, 2, 3] : [1, 2, 3, 4, 5]) as readonly number[];
+const WINDOWS: readonly (readonly [number, number])[] = QUICK
+  ? [[1, 3], [4, 6]]
+  : [[20, 60], [90, 120]];
+const OUTPUT_PATH = QUICK ? "out/disturbance-quick.csv" : "out/disturbance.csv";
 
 interface Variant {
   readonly label: string;
@@ -93,7 +98,7 @@ const ROWS: readonly Row[] = [
   })),
   { label: "constant wind", disturbance: constantWind },
   { label: "+20% mass", disturbance: heavyPayload },
-];
+].filter((_, index) => !QUICK || index < 3);
 
 function cell(params: ControllerParams, disturbance: DisturbanceParams, start: number, end: number): number {
   const plant = { config, params };
@@ -150,7 +155,10 @@ function main(): void {
   mkdirSync("out", { recursive: true });
   writeFileSync(OUTPUT_PATH, `${csv.join("\n")}\n`);
   const elapsed = (Date.now() - started) / 1000;
-  console.log(`\nTrue-position RMS (m), mean [min,max] over seeds 1-5, 120 s runs.`);
+  console.log(
+    `\nTrue-position RMS (m), mean [min,max] over seeds ${SEEDS.join(",")}, ` +
+      `${(STEPS * DT).toFixed(0)} s runs${QUICK ? " (quick mode)" : ""}.`,
+  );
   console.log(`Wrote ${OUTPUT_PATH}; elapsed ${elapsed.toFixed(1)} s (${(elapsed / 60).toFixed(1)} min).`);
 }
 
