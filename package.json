@@ -24,7 +24,11 @@
     "tune:calibrate": "tsx scripts/calibrateCmaes.ts",
     "bench:throughput": "tsx scripts/measureParallel.ts",
     "tune:probe": "tsx scripts/costProbe.ts",
-    "zn": "tsx scripts/zn.ts"
+    "zn": "tsx scripts/zn.ts",
+    "tune": "tsx scripts/autotune.ts",
+    "tune:resume": "tsx scripts/autotune.ts --resume",
+    "tune:extend": "tsx scripts/autotune.ts --extend",
+    "benchmark": "tsx scripts/benchmark.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

@@ -191,6 +191,7 @@ export function rollout(
   seed: number,
   key: CostKey,
   steps: number,
+  extraOverride: PlantOverride | null = null,
 ): RolloutMetrics {
   const disturbanceParams = paramsFor(key, seed);
   const active =
@@ -206,7 +207,7 @@ export function rollout(
     trueConfig: config,
   };
   const plant = { config, params };
-  const override = overrideFor(key);
+  const override = extraOverride ?? overrideFor(key);
   const allowContact = key === "mass20";
   const target = setpointFor(key, 0);
   const hoverInitial = key !== "step" && key !== "mismatchKTau" && key !== "mismatchMass" &&
@@ -348,7 +349,7 @@ function tiltOf(state: MultirotorState): number {
   return Math.acos(Math.min(1, Math.max(-1, worldZ)));
 }
 
-interface Baseline {
+export interface Baseline {
   readonly rms: number;
   readonly overshoot: number;
   readonly settling: number;
@@ -402,9 +403,34 @@ function normalizedValue(
   }
 }
 
+export type BaselineTable = Readonly<Record<string, Baseline>>;
+
 export interface CostSuite {
   readonly weights: Readonly<Record<CostKey, number>>;
   evaluate(params: ControllerParams, seeds: readonly number[]): CostResult;
+}
+
+/**
+ * Precompute baselines for the rotating seed subsets once, in the parent, so
+ * worker processes never repeat the expensive default-gain rollouts.
+ */
+export function createBaselineTable(
+  seedLists: readonly (readonly number[])[],
+  config: MultirotorConfig = makeHex({ groundPlane: true }),
+  baseParams: ControllerParams = defaultControllerParams(config),
+  steps: number = FULL_STEPS,
+): BaselineTable {
+  const table: Record<string, Baseline> = {};
+  for (const seeds of seedLists) {
+    for (const key of COST_KEYS) {
+      const metrics = rollout(config, baseParams, seeds[0]!, key, steps);
+      if (metrics.failure !== null && key !== "mass20") {
+        throw new RangeError(`default gains fail ${key}: ${metrics.failure}`);
+      }
+      table[`${seeds.join(",")}|${key}`] = baselineOf(metrics);
+    }
+  }
+  return table;
 }
 
 /**
@@ -417,9 +443,23 @@ export function createCostSuite(
   config: MultirotorConfig = makeHex({ groundPlane: true }),
   baseParams: ControllerParams = defaultControllerParams(config),
   steps: number = FULL_STEPS,
+  precomputed: BaselineTable | null = null,
 ): CostSuite {
   assertFixedDefaults(baseParams);
   const baselines = new Map<string, Map<CostKey, Baseline>>();
+  if (precomputed !== null) {
+    const ids = new Set(
+      Object.keys(precomputed).map((key) => key.slice(0, key.lastIndexOf("|"))),
+    );
+    for (const id of ids) {
+      const table = new Map<CostKey, Baseline>();
+      for (const key of COST_KEYS) {
+        const entry = precomputed[`${id}|${key}`];
+        if (entry !== undefined) table.set(key, entry);
+      }
+      if (table.size === COST_KEYS.length) baselines.set(id, table);
+    }
+  }
 
   function baselineFor(seeds: readonly number[]): Map<CostKey, Baseline> {
     const id = seeds.join(",");
