@@ -46,13 +46,24 @@ const MODE = process.argv.includes("--resume")
   : process.argv.includes("--extend")
     ? "extend"
     : "start";
-const BUDGET = MODE === "extend" ? 1_000 : 750;
+function argument(name: string): number | null {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return null;
+  const value = Number(process.argv[index + 1]);
+  if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError(`${name} needs a positive integer`);
+  return value;
+}
+/** Smoke-only overrides; never used for reported costs or the real tuning run. */
+const MAX_EVALS = argument("--max-evals");
+const SMOKE_STEPS = argument("--steps");
+const BUDGET = MAX_EVALS ?? (MODE === "extend" ? 1_000 : 750);
 const WORKERS = 8;
 const SEED = 20_261_126;
 const ROTATIONS = [[1, 2], [2, 3], [3, 4], [4, 5], [5, 1]] as const;
 const CHECKPOINT = "out/autotune_checkpoint.json";
 const HISTORY = "out/autotune_history.csv";
 const RESULT = "data/tunedGains.json";
+const STEPS = SMOKE_STEPS ?? FULL_STEPS;
 
 interface Evaluation {
   readonly id: number;
@@ -67,7 +78,7 @@ interface HistoryRow {
   readonly seeds: readonly number[];
 }
 
-function makePool(baselineTable: BaselineTable): {
+function makePool(baselineTable: BaselineTable, steps: number): {
   run: (job: { id: number; vector: readonly number[]; seeds: readonly number[] }) => Promise<Evaluation>;
   close: () => void;
 } {
@@ -80,7 +91,7 @@ function makePool(baselineTable: BaselineTable): {
   const queue: { job: { id: number; vector: readonly number[]; seeds: readonly number[] }; resolve: (value: Evaluation) => void }[] = [];
   for (let index = 0; index < WORKERS; index++) {
     const worker = new Worker(new URL("./lib/costWorker.ts", import.meta.url), {
-      workerData: { baselineTable },
+      workerData: { baselineTable, steps },
       execArgv: ["--import", "tsx"],
     });
     const slot: Slot = { worker, busy: false, resolve: null };
@@ -124,7 +135,7 @@ async function main(): Promise<void> {
     [...ROTATIONS, DEV_SEEDS as readonly number[]],
     config,
     base,
-    FULL_STEPS,
+    STEPS,
   );
 
   const bounds = {
@@ -150,7 +161,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const pool = makePool(baselineTable);
+  const pool = makePool(baselineTable, STEPS);
   const candidates: { vector: readonly number[]; cost: number }[] = [];
   let nextId = 0;
   process.on("SIGINT", () => {
@@ -188,7 +199,7 @@ async function main(): Promise<void> {
 
   // Winner selection: full dev-seed 1-5 re-score of the top five, never the
   // in-run rotating-seed cost.
-  const suite = createCostSuite(config, base, FULL_STEPS, baselineTable);
+  const suite = createCostSuite(config, base, STEPS, baselineTable);
   const ranked = [...candidates].sort((a, b) => a.cost - b.cost).slice(0, 5);
   let bestEntry: { vector: readonly number[]; cost: number } | null = null;
   for (const entry of ranked) {

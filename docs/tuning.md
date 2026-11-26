@@ -4,6 +4,28 @@ This document is the contract for M6. It was committed **before any tuning run**
 A fresh session can continue from the repository alone. Nothing here may be
 changed after seeing held-out results.
 
+## Pre-run amendments (applied before any tuning)
+
+1. The tuning objective is now a weighted **geometric** mean
+   `exp(Σ w_i ln(term_i/default_i))` with floors applied before the log, so the
+   default is still exactly 1.000 and the objective matches the held-out
+   headline. Weights (sum 1.00): light .08, moderate .10, gusty .12, strong .10,
+   constant 5 m/s .08, mass20 .14, step .12, square .08, hoverJitter .06,
+   mismatchKTau .06, mismatchMass .06. Hard failures still return finite 1e6.
+2. The ZN position loop is **not applicable**: a P-only loop on a double
+   integrator has no finite ultimate gain (the plant contributes −180° only at
+   zero frequency), so no Ku/Tu exists and the default position gains are kept.
+   This is a property of the plant, not a hand-tuned choice.
+3. The ZN attitude loop is **P-only** (tilt/yaw gains are proportional attitude
+   errors; derivative action lives in the fixed rate loop). Therefore the PI
+   rule `Kp = 0.45 Ku, Ti = 0.83 Tu` is used, not the PID rule
+   `Kp = 0.6 Ku, Ti = 0.5 Tu, Td = 0.125 Tu`: there is no attitude derivative
+   term to set, and adding one would duplicate the rate loop's fixed D action.
+4. A `--max-evals N` smoke mode was added to the tune script (and a `--steps N`
+   smoke-only horizon override). It is used solely to verify CLI/history/
+   checkpoint/resume mechanics; it is not a tuning run and is never used for
+   reported costs.
+
 ## Scope and fixed controller structure
 
 Not in scope: new physics, new disturbance models, controller structure changes.
@@ -62,16 +84,17 @@ included**:
 
 | term | weight |
 |---|---:|
-| 5 m step | 3/16 |
-| square tracking | 3/16 |
-| light, moderate, gusty, strong wind | 1/16 each |
-| constant 5 m/s wind | 1/16 |
-| +20% mass | 2/16 |
-| noise-on hover jitter | 1/16 |
-| 5 m step, kT −10% + tau +30% | 1/16 |
-| 5 m step, mass +10% | 1/16 |
+| light / moderate / gusty / strong wind | 0.08 / 0.10 / 0.12 / 0.10 |
+| constant 5 m/s wind | 0.08 |
+| +20% mass | 0.14 |
+| 5 m step | 0.12 |
+| square tracking | 0.08 |
+| noise-on hover jitter | 0.06 |
+| 5 m step, kT −10% + tau +30% | 0.06 |
+| 5 m step, mass +10% | 0.06 |
 
-Weights are binary fractions summing to exactly 1. The step term is
+These are the **pre-run amendment** weights (sum 1.00), re-weighted toward the
+headline. The step term is
 `0.5·overshoot + 0.3·settling + 0.2·ISE`; the mass term is
 `0.75·RMS + 0.25·contact_seconds`. Other terms use mean true-position RMS over
 [20,120] s; jitter is the standard deviation of the per-step motor-speed
@@ -79,10 +102,11 @@ derivative.
 
 Normalization: each subterm is `1 + (value - default_value) / max(default_value,
 floor)`, so a floor-dominated default still scores exactly **1.000**. Floors:
-overshoot 2%, settling 0.5 s, ISE 1e-6, RMS 1e-4, contact 1 s, jitter 1e-6.
-Floor-limited deviations are scaled by the floor; this is documented, not a
-tolerance change. The measured default cost is **1.000000000000** on dev seeds
-1–5, and the dominant weighted contribution is the step term.
+overshoot 2%, settling 0.5 s, ISE 1e-6, RMS 1e-4, contact 1 s, jitter 1e-6,
+applied **before** the log. The objective is the weighted **geometric** mean
+`exp(Σ w_i ln(term_i / default_i))`, matching the pre-registered held-out
+headline; any hard failure still makes the total the finite **1e6**. The
+measured default cost is **1.000000000000** on dev seeds 1–5.
 
 Hard failures return the finite penalty **1e6** with a logged reason: non-finite
 or divergent state (|x| or |v| > 100), ground contact in flight, mixer
@@ -179,6 +203,8 @@ the controller keeping nominal values; report degradation, not only wins.
 ```
 npm run zn                 # regenerate ZN baselines and log
 npm run tune:probe         # one full default evaluation, breakdown + timing
+npm run tune:baselines     # score default + both ZN variants on dev seeds 1-5
+npm run tune -- --max-evals 20 --steps 2000   # smoke test only
 npm run tune               # start: 750 evaluations
 npm run tune:resume        # continue from out/autotune_checkpoint.json
 npm run tune:extend        # resume and apply the 2%/15-gen extension rule

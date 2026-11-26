@@ -57,7 +57,7 @@ describe("M6 gain parameterization", () => {
 
 describe("M6 tuning cost", () => {
   it("scores the default gains at exactly 1.000 with weights summing to one", () => {
-    expect(COST_KEYS.reduce((sum, key) => sum + TERM_WEIGHTS[key], 0)).toBe(1);
+    expect(COST_KEYS.reduce((sum, key) => sum + TERM_WEIGHTS[key], 0)).toBeCloseTo(1, 12);
     const result = suite.evaluate(base, SEEDS);
     expect(result.total).toBeCloseTo(1, 12);
     expect(result.terms.every((term) => Math.abs(term.normalized - 1) < 1e-12)).toBe(true);

@@ -53,19 +53,23 @@ export type CostKey =
   | "mismatchKTau"
   | "mismatchMass";
 
-/** Documented plain-data weights: binary fractions summing to exactly 1. */
+/**
+ * Pre-run amendment: weights re-focused on the pre-registered headline.
+ * Plain data summing to 1.00; the objective is a weighted GEOMETRIC mean of the
+ * per-term ratios, matching the held-out headline.
+ */
 export const TERM_WEIGHTS: Readonly<Record<CostKey, number>> = {
-  step: 3 / 16,
-  square: 3 / 16,
-  light: 1 / 16,
-  moderate: 1 / 16,
-  gusty: 1 / 16,
-  strong: 1 / 16,
-  constant5: 1 / 16,
-  mass20: 2 / 16,
-  hoverJitter: 1 / 16,
-  mismatchKTau: 1 / 16,
-  mismatchMass: 1 / 16,
+  step: 0.12,
+  square: 0.08,
+  light: 0.08,
+  moderate: 0.1,
+  gusty: 0.12,
+  strong: 0.1,
+  constant5: 0.08,
+  mass20: 0.14,
+  hoverJitter: 0.06,
+  mismatchKTau: 0.06,
+  mismatchMass: 0.06,
 };
 
 export const COST_KEYS = Object.keys(TERM_WEIGHTS) as CostKey[];
@@ -485,14 +489,18 @@ export function createCostSuite(
       assertFixedDefaults(params);
       const baseline = baselineFor(seeds);
       const terms: TermBreakdown[] = [];
-      let total = 0;
+      let logTotal = 0;
+      let hardFailure = false;
       for (const key of COST_KEYS) {
         const metrics = rollout(config, params, seeds[0]!, key, steps);
         const failure =
           metrics.failure !== null &&
           !(key === "mass20" && metrics.failure === "ground contact in flight");
         const value = failure ? FAILURE_COST : normalizedValue(key, metrics, baseline.get(key)!);
-        total += TERM_WEIGHTS[key] * value;
+        if (failure) hardFailure = true;
+        // Floors are applied inside normalizedValue, before the log. A failed
+        // term is a finite 1e6 and makes the whole cost a finite 1e6.
+        logTotal += TERM_WEIGHTS[key] * Math.log(value);
         terms.push({
           key,
           weight: TERM_WEIGHTS[key],
@@ -501,6 +509,7 @@ export function createCostSuite(
           reason: metrics.failure,
         });
       }
+      const total = hardFailure ? FAILURE_COST : Math.exp(logTotal);
       return { total, terms, seeds: [...seeds] };
     },
   };
