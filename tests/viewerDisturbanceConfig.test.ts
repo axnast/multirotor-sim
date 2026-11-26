@@ -8,6 +8,7 @@ import {
   buildDisturbanceParams,
   DEFAULT_VIEWER_DISTURBANCE,
   viewerPack,
+  viewerPayload,
 } from "../src/viewer/sim/disturbanceConfig";
 import { MISSIONS } from "../src/viewer/sim/mission";
 import { ringToArray } from "../src/viewer/sim/ringBuffer";
@@ -61,6 +62,17 @@ describe("viewer disturbance settings", () => {
     expect(params.battery.minVoltageFraction).toBe(0.45);
     expect(viewerPack("realistic").minVoltageFraction).toBe(0.85);
     expect(isDisturbanceActive(params)).toBe(true);
+  });
+
+  it("defaults the payload size to the small, non-flipping case", () => {
+    expect(DEFAULT_VIEWER_DISTURBANCE.payloadSize).toBe("small");
+    expect(viewerPayload("small")).toEqual({ mass: 0.003, position: [0.501, 0, 0] });
+    expect(viewerPayload("stress").mass).toBeCloseTo(0.3, 9);
+    const params = buildDisturbanceParams({
+      ...DEFAULT_VIEWER_DISTURBANCE,
+      payload: viewerPayload("small"),
+    });
+    expect(params.payload?.payload.mass).toBeCloseTo(0.003, 9);
   });
 
   it("rejects an invalid seed", () => {

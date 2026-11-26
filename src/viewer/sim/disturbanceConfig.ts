@@ -11,6 +11,10 @@ import {
   type BatteryPack,
 } from "../../core/disturbance/battery";
 import {
+  PAYLOAD_LARGE_STRESS,
+  PAYLOAD_SMALL,
+} from "../../core/disturbance/payload";
+import {
   disturbanceParamsFor,
   type ScenarioId,
 } from "../../core/disturbance/scenario";
@@ -20,6 +24,7 @@ import type {
 } from "../../core/disturbance/types";
 
 export type ViewerPackId = "realistic" | "stress";
+export type ViewerPayloadSize = "small" | "stress";
 
 export interface ViewerDisturbanceSettings {
   readonly scenario: ScenarioId;
@@ -29,6 +34,8 @@ export interface ViewerDisturbanceSettings {
   readonly pack: ViewerPackId;
   /** 0–1, passed to the battery model. */
   readonly stateOfCharge: number;
+  /** Which payload the Drop button installs; Small is the safe default. */
+  readonly payloadSize: ViewerPayloadSize;
   readonly payload: PayloadSpec | null;
 }
 
@@ -40,11 +47,16 @@ export const DEFAULT_VIEWER_DISTURBANCE: ViewerDisturbanceSettings = {
   battery: false,
   pack: "realistic",
   stateOfCharge: 1,
+  payloadSize: "small",
   payload: null,
 };
 
 export function viewerPack(id: ViewerPackId): BatteryPack {
   return id === "stress" ? STRESS_PACK : REALISTIC_PACK;
+}
+
+export function viewerPayload(size: ViewerPayloadSize): PayloadSpec {
+  return size === "stress" ? PAYLOAD_LARGE_STRESS : PAYLOAD_SMALL;
 }
 
 export function buildDisturbanceParams(

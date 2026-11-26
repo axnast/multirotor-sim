@@ -99,12 +99,15 @@ preserving the user's orbit offset.
   preserved and live tuning is bumpless without changing core behaviour.
 - **Disturbances** section: scenario select (calm/light/moderate/gusty/strong),
   seed, sensor-noise toggle, battery toggle with realistic/stress pack choice
-  and starting-SoC slider, and a **Drop payload** button that installs
-  `PAYLOAD_LARGE_STRESS` (and toggles to **Remove payload**). All defaults are
-  off, so the runner stays on the bit-identical pre-M5 path. Changing the
-  scenario, seed or toggles restarts the disturbance streams; dropping the
-  payload uses `installPayload()` and preserves the flight and running streams.
-  A payload installed before reset is installed again at t = 0 by the reset.
+  and starting-SoC slider, a payload-size select and a **Drop payload** button
+  that toggles to **Remove payload**. The payload select defaults to
+  **Small (PAYLOAD_SMALL)** so the viewer does not flip the drone by default;
+  **Stress (0.3 kg, 2 cm COM)** is labelled a known baseline weakness. All
+  defaults are off, so the runner stays on the bit-identical pre-M5 path.
+  Changing the scenario, seed or toggles restarts the disturbance streams;
+  dropping the payload uses `installPayload()` and preserves the flight and
+  running streams. A payload installed before reset is installed again at t = 0
+  by the reset.
 - Plots are pure `buildPlotFrame(spec) → draw commands` (`plotModel.ts`); the
   canvas file only applies DPR and executes commands. Three canvases show
   position x/y/z, attitude roll/pitch/yaw and motor speeds, setpoint dashed
@@ -118,7 +121,10 @@ preserving the user's orbit offset.
   count and ground contact. The status line and HUD use the same
   `positionErrorM` helper and the same throttled state sample, so they cannot
   disagree by a frame. An arrow in the 3D scene follows the drone and shows the
-  current wind vector; it is hidden when wind is off.
+  current wind vector; it is hidden when wind is off. The HUD and plots share a
+  flex right column with a 10 px gap, so extra HUD rows push the plots down
+  instead of covering them; below 720 px the two side columns become
+  independently scrollable stacks.
 
 ## Build and deployment
 

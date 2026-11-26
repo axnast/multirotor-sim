@@ -261,11 +261,20 @@ body,
   color: #e2e8f5;
 }
 
-#hud {
+#right-column {
   position: absolute;
   right: 16px;
   top: 16px;
+  bottom: 130px;
   width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#hud {
+  flex: 0 0 auto;
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 10px;
@@ -301,11 +310,10 @@ body,
 }
 
 #plot-panel {
-  position: absolute;
-  right: 16px;
-  top: 172px;
-  bottom: 130px;
-  width: 340px;
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -358,4 +366,39 @@ body,
 .boot p {
   margin: 0;
   color: #94a3b8;
+}
+
+/* Phone width: one scrollable stack per side instead of two 300/340px columns. */
+@media (max-width: 720px) {
+  #control-panel {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    width: auto;
+    max-height: 34%;
+  }
+
+  #right-column {
+    left: 8px;
+    right: 8px;
+    top: calc(34% + 16px);
+    bottom: 8px;
+    width: auto;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  #plot-panel {
+    flex: 0 0 auto;
+    height: 340px;
+  }
+
+  .plot-canvas {
+    flex: 0 0 auto;
+    height: 90px;
+  }
+
+  #axis-legend {
+    display: none;
+  }
 }

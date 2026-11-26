@@ -1,7 +1,6 @@
 /** DOM control panel: missions, playback, waypoint, camera and gain sliders. */
 
 import type { ControllerParams, Setpoint } from "../../core/control/types";
-import { PAYLOAD_LARGE_STRESS } from "../../core/disturbance/payload";
 import {
   SCENARIOS,
   SCENARIO_IDS,
@@ -10,8 +9,10 @@ import {
 import type { PayloadSpec } from "../../core/disturbance/types";
 import {
   DEFAULT_VIEWER_DISTURBANCE,
+  viewerPayload,
   type ViewerDisturbanceSettings,
   type ViewerPackId,
+  type ViewerPayloadSize,
 } from "../sim/disturbanceConfig";
 import { MISSIONS, type Mission, type MissionId } from "../sim/mission";
 import {
@@ -321,14 +322,35 @@ function createControls(
     socOutput,
   );
 
-  const payloadButton = makeButton(
-    "Drop payload",
-    "Apply PAYLOAD_LARGE_STRESS (0.3 kg, 2 cm COM) now",
-  );
+  const payloadRow = document.createElement("label");
+  payloadRow.className = "select-row";
+  payloadRow.appendChild(document.createTextNode("Payload"));
+  const payloadSelect = document.createElement("select");
+  for (const [id, label] of [
+    ["small", "Small (PAYLOAD_SMALL)"],
+    ["stress", "Stress (0.3 kg, 2 cm COM) — known weakness"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = label;
+    payloadSelect.appendChild(option);
+  }
+  payloadSelect.addEventListener("change", () => {
+    settings = { ...settings, payloadSize: payloadSelect.value as ViewerPayloadSize };
+  });
+  payloadRow.appendChild(payloadSelect);
+
+  const payloadHint = document.createElement("p");
+  payloadHint.className = "hint";
+  payloadHint.textContent =
+    "Small (0.003 kg) is the safe default. Stress is a known baseline weakness: " +
+    "0.3 kg at 2 cm COM initially flips the drone.";
+
+  const payloadButton = makeButton("Drop payload", "Drop the selected payload now");
   payloadButton.className = "wide-button";
   payloadButton.addEventListener("click", () => {
     const payload: PayloadSpec | null =
-      settings.payload === null ? PAYLOAD_LARGE_STRESS : null;
+      settings.payload === null ? viewerPayload(settings.payloadSize) : null;
     applySettings({ ...settings, payload });
     callbacks.onPayload(payload);
   });
@@ -340,6 +362,7 @@ function createControls(
     sensorInput.checked = next.sensors;
     batteryInput.checked = next.battery;
     packSelect.value = next.pack;
+    payloadSelect.value = next.payloadSize;
     socInput.value = String(Math.round(next.stateOfCharge * 100));
     updateRangeFill(socInput);
     socOutput.textContent = `${socInput.value}%`;
@@ -349,7 +372,15 @@ function createControls(
   }
 
   disturbances.append(
-    scenarioLabel, seedRow, sensorLabel, batteryLabel, packRow, socRow, payloadButton,
+    scenarioLabel,
+    seedRow,
+    sensorLabel,
+    batteryLabel,
+    packRow,
+    socRow,
+    payloadRow,
+    payloadHint,
+    payloadButton,
   );
   element.appendChild(disturbances);
   applySettings(settings);

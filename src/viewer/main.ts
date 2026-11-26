@@ -185,8 +185,13 @@ const controls: ControlsView = createControls(app, params, {
   },
 });
 
-const hud = createHud(app);
-const plots = createPlotsPanel(app, config.motors.length);
+// HUD and plots share a flex column so a taller HUD pushes the plots down
+// instead of overlapping them.
+const rightColumn = document.createElement("div");
+rightColumn.id = "right-column";
+app.appendChild(rightColumn);
+const hud = createHud(rightColumn);
+const plots = createPlotsPanel(rightColumn, config.motors.length);
 
 controls.setMission(MISSIONS.hover.id);
 controls.setPaused(false);
