@@ -22,7 +22,8 @@
     "demo:flight": "tsx scripts/flightDemo.ts",
     "demo:disturbance": "tsx scripts/disturbanceDemo.ts",
     "tune:calibrate": "tsx scripts/calibrateCmaes.ts",
-    "bench:throughput": "tsx scripts/measureParallel.ts"
+    "bench:throughput": "tsx scripts/measureParallel.ts",
+    "tune:probe": "tsx scripts/costProbe.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

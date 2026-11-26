@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+
+import { defaultControllerParams } from "../src/core/control/controller";
+import { makeHex } from "../src/core/multirotor/config";
+import {
+  COST_KEYS,
+  FAILURE_COST,
+  TERM_WEIGHTS,
+  createCostSuite,
+} from "../src/core/tuning/cost";
+import {
+  DIMENSION,
+  assertFixedDefaults,
+  decode,
+  defaultsToVector,
+  encode,
+  withGains,
+} from "../src/core/tuning/params";
+
+const config = makeHex({ groundPlane: true });
+const base = defaultControllerParams(config);
+// Structural test only: production always uses the full 120 s suite.
+const suite = createCostSuite(config, base, 4_000);
+const SEEDS = [1, 2] as const;
+
+describe("M6 gain parameterization", () => {
+  it("has nine log-scaled dimensions and round-trips the defaults", () => {
+    expect(DIMENSION).toBe(9);
+    const vector = defaultsToVector(base);
+    const gains = decode(vector);
+    expect(encode(gains)).toEqual(vector);
+    expect(gains[0]).toBeCloseTo(0.25, 9);
+    expect(gains[8]).toBeCloseTo(0.1, 9);
+  });
+
+  it("clips out-of-range coordinates and leaves fixed fields untouched", () => {
+    const gains = decode(Array(DIMENSION).fill(100));
+    expect(gains[0]).toBeCloseTo(1, 9);
+    expect(gains[8]).toBeCloseTo(1, 9);
+    const tuned = withGains(base, Array(DIMENSION).fill(1));
+    assertFixedDefaults(tuned);
+    expect(tuned.position.integralDwell).toBe(base.position.integralDwell);
+    expect(tuned.position.integralTrimGain).toBe(base.position.integralTrimGain);
+    expect(tuned.position.integralReleaseGuard).toBe(base.position.integralReleaseGuard);
+    expect(tuned.rate.derivativeCutoff).toBe(base.rate.derivativeCutoff);
+    expect(tuned.position.maxTilt).toBe(base.position.maxTilt);
+    expect(tuned.rate.maxAngularAcceleration).toEqual(base.rate.maxAngularAcceleration);
+  });
+
+  it("matches the fixed defaults verified in the code", () => {
+    expect(base.position.integralDwell).toBe(5);
+    expect(base.position.integralTrimGain).toBe(3);
+    expect(base.position.integralReleaseGuard).toBe(2);
+    expect(base.rate.derivativeCutoff).toBe(50);
+  });
+});
+
+describe("M6 tuning cost", () => {
+  it("scores the default gains at exactly 1.000 with weights summing to one", () => {
+    expect(COST_KEYS.reduce((sum, key) => sum + TERM_WEIGHTS[key], 0)).toBe(1);
+    const result = suite.evaluate(base, SEEDS);
+    expect(result.total).toBeCloseTo(1, 12);
+    expect(result.terms.every((term) => Math.abs(term.normalized - 1) < 1e-12)).toBe(true);
+  }, 30_000);
+
+  it("scores a deliberately bad gain set worse", () => {
+    const bad = withGains(base, [
+      Math.log(1),
+      Math.log(0.2),
+      Math.log(0.1),
+      Math.log(3),
+      Math.log(3),
+      Math.log(0.5),
+      Math.log(3),
+      Math.log(0.002),
+      Math.log(1),
+    ]);
+    expect(suite.evaluate(bad, SEEDS).total).toBeGreaterThan(suite.evaluate(base, SEEDS).total);
+  }, 30_000);
+
+  it("returns a finite penalty for hard failures", () => {
+    // Very weak position/rate gains let the drone fall: ground contact in
+    // flight is a hard failure in every scenario except +20% mass.
+    const vector = [
+      Math.log(0.05), Math.log(0.2), Math.log(4), Math.log(3), Math.log(3),
+      Math.log(0.5), Math.log(3), Math.log(0.002), Math.log(1),
+    ];
+    const result = suite.evaluate(withGains(base, vector), SEEDS);
+    expect(Number.isFinite(result.total)).toBe(true);
+    expect(result.terms.some((term) => term.value === FAILURE_COST)).toBe(true);
+  }, 30_000);
+
+  it("is deterministic for a fixed seed subset", () => {
+    const first = suite.evaluate(base, SEEDS);
+    const second = suite.evaluate(base, SEEDS);
+    expect(second).toEqual(first);
+  }, 30_000);
+});

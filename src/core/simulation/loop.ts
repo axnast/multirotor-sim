@@ -54,6 +54,34 @@ export interface CoreState {
   readonly trueConfig: MultirotorConfig;
 }
 
+/**
+ * Model-mismatch constants applied to the plant only. `null` (the default,
+ * used by the viewer and every existing test) leaves the config untouched.
+ * These are placeholder perturbations for robustness reporting, not new
+ * physics: the controller still sees the nominal config and gains.
+ */
+export interface PlantOverride {
+  readonly massScale?: number;
+  readonly kTScale?: number;
+  readonly tauScale?: number;
+}
+
+export function applyPlantOverride(
+  config: MultirotorConfig,
+  override: PlantOverride,
+): MultirotorConfig {
+  return {
+    ...config,
+    mass: config.mass * (override.massScale ?? 1),
+    motors: config.motors.map((motor) => ({
+      ...motor,
+      kT: motor.kT * (override.kTScale ?? 1),
+      motorTimeConstant:
+        motor.motorTimeConstant * (override.tauScale ?? 1),
+    })),
+  };
+}
+
 export interface StepResult {
   readonly state: MultirotorState;
   readonly controller: ControllerState;
@@ -89,6 +117,7 @@ export function simulateStep(
   plant: SimulationPlant,
   setpoint: Setpoint,
   dt: number,
+  plantOverride: PlantOverride | null = null,
 ): StepResult {
   const truth = measurementOf(state.multirotor);
   const disturbed =
@@ -110,7 +139,9 @@ export function simulateStep(
     dt,
   );
   const mixed = mixDetailed(plant.config, command.wrench);
-  const trueConfig = disturbed?.trueConfig ?? state.trueConfig;
+  const disturbedConfig = disturbed?.trueConfig ?? state.trueConfig;
+  const trueConfig =
+    plantOverride === null ? disturbedConfig : applyPlantOverride(disturbedConfig, plantOverride);
   const environment = disturbed?.environment ?? STILL_AIR;
   // A voltage drop can lower the ceiling below the rotors' current speed.
   // The core state invariant forbids overspeed, so project onto the new
