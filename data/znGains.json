@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "dt": 0.001,
+  "ultimate": {
+    "position": {
+      "gains": {
+        "kp": 0.25,
+        "ki": 0.01,
+        "kd": 1
+      },
+      "integralSeparation": 0.1,
+      "integralDwell": 5,
+      "integralTrimGain": 3,
+      "integralReleaseGuard": 2,
+      "maxAccelXY": 6,
+      "maxAccelZ": 3,
+      "maxTilt": 0.5235987755982988,
+      "minThrust": 1.4715,
+      "maxThrust": 48
+    },
+    "attitude": {
+      "tiltGain": 12.723661759323916,
+      "yawGain": 12.723661759323916,
+      "maxTiltRate": 2.5,
+      "maxYawRate": 1.2,
+      "maxBodyRate": 3
+    },
+    "rate": {
+      "gains": {
+        "kp": 3,
+        "ki": 0.5,
+        "kd": 0.02
+      },
+      "derivativeCutoff": 50,
+      "maxAngularAcceleration": [
+        20,
+        20,
+        1.8835199999999996
+      ]
+    }
+  },
+  "reaction": {
+    "position": {
+      "gains": {
+        "kp": 0.25,
+        "ki": 0.01,
+        "kd": 1
+      },
+      "integralSeparation": 0.1,
+      "integralDwell": 5,
+      "integralTrimGain": 3,
+      "integralReleaseGuard": 2,
+      "maxAccelXY": 6,
+      "maxAccelZ": 3,
+      "maxTilt": 0.5235987755982988,
+      "minThrust": 1.4715,
+      "maxThrust": 48
+    },
+    "attitude": {
+      "tiltGain": 44.95071329350663,
+      "yawGain": 44.95071329350663,
+      "maxTiltRate": 2.5,
+      "maxYawRate": 1.2,
+      "maxBodyRate": 3
+    },
+    "rate": {
+      "gains": {
+        "kp": 24.48483406367838,
+        "ki": 249.79462463450167,
+        "kd": 0.6000000000030636
+      },
+      "derivativeCutoff": 50,
+      "maxAngularAcceleration": [
+        20,
+        20,
+        1.8835199999999996
+      ]
+    }
+  }
+}

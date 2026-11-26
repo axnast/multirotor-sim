@@ -23,7 +23,8 @@
     "demo:disturbance": "tsx scripts/disturbanceDemo.ts",
     "tune:calibrate": "tsx scripts/calibrateCmaes.ts",
     "bench:throughput": "tsx scripts/measureParallel.ts",
-    "tune:probe": "tsx scripts/costProbe.ts"
+    "tune:probe": "tsx scripts/costProbe.ts",
+    "zn": "tsx scripts/zn.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
