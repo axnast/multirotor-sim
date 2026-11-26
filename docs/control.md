@@ -130,11 +130,24 @@ settings are plain data and have viewer sliders; the 0.06 m/s rest threshold and
 0.3 s filter are documented constants.
 
 Measured effect: the 5 m step, square, takeoff, 500 m recovery and 45 s flight
-digest are unchanged; a constant 5 m/s wind trims from 3.67 m to <0.05 m by
-~90 s (with sensor noise); centred +20 % mass recovers from 4.99 m to <0.1 m;
-the centred 10 g payload recovers from 0.202 m. The release does **not** improve
-gusty scenarios — their residual error is driven by the wind process, not by the
-frozen integrator (see [disturbances.md](disturbances.md)).
+digest are unchanged; a constant 5 m/s wind trims from 3.68 m to 0.0028 m by
+120 s with sensors off, or 0.0109 m with sensor noise on. With noise it is still
+1.075 m at 60 s and 0.066–0.084 m over 80–90 s (five development seeds), so the
+test uses a 120 s window. Centred +20 % mass recovers from 4.99 m to <0.1 m;
+the centred 10 g payload recovers from 0.202 m.
+
+Under gusts the release is neutral (M3 gate and default agree to <0.002 m RMS),
+but the separation gate is **not** irrelevant: with unconditional integration
+the 20–60 s RMS is 11–29 % lower across all five seeds (paired t = −3.09 to
+−8.25). That reference is not a viable controller — it overshoots a 5 m step by
+12.7 % and is worse on constant 5 m/s wind (1.445 m vs 0.769 m at 20–60 s,
+0.0365 m vs 0.0059 m at 90–120 s). In the 90–120 s window no significant gust
+difference is demonstrable (|t| ≤ 1.13). Some 71–89 % of the default gust RMS
+survives with the gate removed, consistent with the soft outer loop being the
+larger contributor; this is an inference, not a separate decomposition. M6 must
+beat **both** the default and gate-off references. See
+[disturbances.md](disturbances.md) for the tables, the sign-test ordering rule
+and the held-out seed plan.
 
 **M6 caution:** the release makes the tuning cost surface **discontinuous** —
 crossing `integralDwell` switches a different integration law on. Treat

@@ -34,8 +34,9 @@ exactly with `P = Σ kQ ω³`.
 
 ## Constant wind: noise off vs noise on
 
-True position error, 5 fixed seeds (1–5), 120 s runs, mean over the final 10 s
-(range across seeds in brackets). Three controller variants:
+True position error, five **development seeds** (1–5), 120 s runs, mean over the
+final 10 s (range across seeds in brackets). Seeds 1001–1020 are reserved for
+held-out M6 evaluation. Three controller variants:
 
 - **M3 gate**: `integralDwell = 0` (the pre-fix gate, bit-identical to M3).
 - **default**: the release is active (`integralDwell = 5 s`, `integralTrimGain = 3`).
@@ -60,23 +61,57 @@ uses 120 s. The steady tilt is the drag prediction
 
 True-position RMS (m), mean [min, max] across seeds 1–5:
 
-| Scenario | Window | M3 gate | default |
-|---|---|---|---|
-| light | 20–60 s | 0.919 [0.786, 0.996] | 0.863 [0.651, 0.996] |
-| light | 90–120 s | 0.418 [0.313, 0.553] | 0.369 [0.299, 0.493] |
-| moderate | 20–60 s | 2.956 [2.295, 3.421] | 2.957 [2.298, 3.421] |
-| moderate | 90–120 s | 1.531 [1.098, 2.160] | 1.529 [1.096, 2.162] |
-| gusty | 20–60 s | 4.043 [2.484, 5.427] | 4.044 [2.486, 5.427] |
-| gusty | 90–120 s | 2.859 [1.917, 4.052] | 2.859 [1.916, 4.055] |
-| strong | 20–60 s | 5.895 [4.310, 7.072] | 5.896 [4.316, 7.072] |
-| strong | 90–120 s | 3.201 [2.147, 4.840] | 3.199 [2.147, 4.840] |
+True-position RMS (m), mean [min, max] across development seeds 1–5, sensors
+off; noise on/off changes these numbers by <0.002 m.
 
-Noise on/off changes these RMS values by <0.002 m. The release makes essentially
-no difference to moderate/gusty/strong: their residual is driven by the wind
-process (OU with Tc = 2 s gives roughly five independent samples per 10 s
-window, so single-seed numbers have wide spread), **not** by the frozen
-integrator. A mean-velocity trigger was also evaluated and left 2.5–3.6 m under
-gusts; gust rejection is an M6 target, not a claimed M5 fix.
+| Scenario | Window | M3 gate | default | gate off |
+|---|---|---|---|---|
+| light | 20–60 s | 0.919 [0.786, 0.996] | 0.863 [0.651, 0.996] | 0.609 [0.444, 0.762] |
+| light | 90–120 s | 0.418 [0.313, 0.553] | 0.369 [0.299, 0.493] | 0.346 [0.251, 0.399] |
+| moderate | 20–60 s | 2.956 [2.295, 3.421] | 2.957 [2.298, 3.421] | 2.122 [1.410, 2.811] |
+| moderate | 90–120 s | 1.531 [1.098, 2.160] | 1.529 [1.096, 2.162] | 1.352 [0.949, 1.580] |
+| gusty | 20–60 s | 4.043 [2.484, 5.427] | 4.044 [2.486, 5.427] | 3.592 [2.239, 5.272] |
+| gusty | 90–120 s | 2.859 [1.917, 4.052] | 2.859 [1.916, 4.055] | 2.763 [1.853, 3.234] |
+| strong | 20–60 s | 5.895 [4.310, 7.072] | 5.896 [4.316, 7.072] | 4.347 [2.713, 5.993] |
+| strong | 90–120 s | 3.201 [2.147, 4.840] | 3.199 [2.147, 4.840] | 2.857 [1.945, 3.453] |
+
+The release is effectively neutral under gusts (M3 gate and default agree to
+<0.002 m), but the gate is **not** irrelevant: with unconditional integration
+the 20–60 s RMS is 11–29 % lower (all five paired per-seed differences have the
+same sign; paired t = −3.09 to −8.25). In 90–120 s the reduction is only 3–12 %
+and is not significant (|t| ≤ 1.13). Some 71–89 % of the default RMS survives
+with the gate removed, consistent with the soft outer loop tracking the OU wind
+rather than the integrator being the dominant term; that is an inference, not a
+separate decomposition. The wind process (Tc = 2 s, roughly five independent
+samples per 10 s window) makes single-seed numbers unreliable. A mean-velocity
+trigger was also evaluated and left 2.5–3.6 m under gusts.
+
+**Gate off is not uniformly better.** On constant 5 m/s wind it is 1.445 m vs
+0.769 m for the default in 20–60 s, and 0.0365 m vs 0.0059 m in 90–120 s, and
+it overshoots a 5 m step by 12.7 %. M6 must beat **both** the default and the
+gate-off references on the gust scenarios without inheriting that overshoot or
+the constant-wind wind-up.
+
+The constant-wind and +20 %-mass rows of `out/disturbance.csv` are
+deterministic: sensor noise is off and neither row has a stochastic component,
+so all five seeds are bit-identical (min = max). Their spread is zero by
+construction, not a measured confidence interval.
+
+## Seeds and statistical claims
+
+Seeds 1–5 are **development seeds**, used for tuning and every table here and
+in `out/disturbance.csv`. Scenario orderings are asserted by a five-seed sign
+test: all five paired per-seed differences must be positive (exact one-sided
+p = 1/32). Printed paired t values are informational only. For n = 5 the
+uncorrected 5 % cutoff is t = 2.776, power is limited, and the six orderings are
+**not** multiplicity-corrected. `moderate < gusty` in 20–60 s passes the sign
+test but is marginal (t = 2.96). `gusty < strong` in 90–120 s has one negative
+paired difference (t = 2.09) and is reported but not asserted.
+
+For M6, pre-register the **primary metric** as the mean RMS over [20, 120] s per
+scenario on held-out seeds **1001–1020**, never used while tuning, compared by
+paired differences against the M3 gate, the default and the gate-off reference.
+The [20, 60] and [90, 120] windows are secondary.
 
 ## Payload envelope
 
