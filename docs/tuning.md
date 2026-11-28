@@ -59,6 +59,26 @@ changed after seeing held-out results.
    stopping at the first crossing would report ~1.0 from a handful of steps and
    destroy the gradient); NaN/Inf/divergence/contact still stop early.
 
+## Protocol amendment (before the held-out run): headline scenarios
+
+The pre-registered text said "geometric mean over the **five stochastic
+scenarios**" but enumerated six scenarios, and only four of them have nonzero
+gust sigma (light, moderate, gusty, strong). Before any held-out run, with the
+dev-seed ratios already known, the headline was fixed explicitly:
+
+> Headline = geometric mean over the **four stochastic gust scenarios** (light,
+> moderate, gusty, strong) of tuned RMS / baseline RMS on held-out seeds, with
+> a paired bootstrap 95% CI (resample seeds jointly across scenarios).
+
+The **less favourable** definition was chosen deliberately. Unweighted dev-seed
+geometric means (tuned/default RMS) are about **0.200** for the four gust
+scenarios, **0.139** when +20 % mass is added, and **0.099** when constant
+5 m/s is added instead. `constant5` and `mass20` are reported as separate
+secondary rows — deterministic apart from sensor noise and dominated by
+integrator trim speed — together with an all-six-scenario geometric mean as a
+secondary line. The list lives in `src/core/tuning/protocol.ts`; a unit test
+pins it so the headline cannot change silently.
+
 **Startup-burst diagnosis (PI variant, dev seed 1):** the ZN attitude P gain
 (44.95) is closed through the aggressive ZN rate loop, and the desired rate
 grows to ~2 rad/s over the first second, after which the rate PID demands
@@ -438,8 +458,11 @@ Primary metric: per scenario (light, moderate, gusty, strong, constant 5 m/s,
 geometric mean over the **five stochastic scenarios** of tuned/baseline RMS,
 with a bootstrap 95% CI (**10,000 resamples**, seed indices resampled with
 replacement, paired by seed across variants). A per-scenario win is claimed only
-if its paired CI excludes zero. Paired per-seed differences against each
-baseline: mean, SE, bootstrap CI and fraction of seeds improved.
+if its paired CI excludes zero. **Amended before the held-out run:** the
+headline is the four gust scenarios (see "Protocol amendment" above), with the
+all-six mean and constant5/mass20 reported separately. Paired per-seed
+differences against each baseline: mean, SE, bootstrap CI and fraction of seeds
+improved.
 
 Secondary: windows [20,60] and [90,120]; 5 m step overshoot/settling/ISE; max
 tilt; saturation steps; motor-command jitter with noise on; ground-contact
@@ -469,12 +492,25 @@ npm run tune               # start: 750 evaluations
 npm run tune:resume        # continue from out/autotune_checkpoint.json
 npm run tune:extend        # resume and apply the 2%/15-gen extension rule
 Get-Content out/autotune_history.csv -Tail 5    # check progress
-npm run benchmark          # only after data/tunedGains.json exists
+npm run benchmark -- --dev --steps 30000   # pre-flight on dev seeds 1-5; no lock
+npm run benchmark          # held-out run, once, only after data/tunedGains.json exists
+npm run benchmark -- --allow-rerun   # explicit held-out re-run (writes a new lock)
 ```
+
+**Benchmark pre-flight and one-shot guard.** `--dev` uses dev seeds 1-5 and
+writes `out/benchmark-dev.csv` instead of `out/benchmark.csv`; it checks the CSV
+columns, the invalid-baseline path, the bootstrap headline/paired CIs and the
+fixed `max_tilt_rad` column without touching held-out seeds or the lock.
+`--steps N` is allowed only with `--dev`. A completed held-out run writes
+`out/benchmark.lock` with the SHA-256 of `data/tunedGains.json`, the git commit,
+the seed/horizon/headline configuration and a completion timestamp. If that
+lock exists, the script refuses to start another held-out run without
+`--allow-rerun`; this is a one-shot guard, not a tuning knob.
 
 Outputs: `out/autotune_history.csv` (learning curve), `out/autotune_checkpoint.json`
 (resumable full state), `data/tunedGains.json` (final gains, seed, version,
-weights, evaluation count), `out/benchmark.csv`, printed markdown tables.
+weights, evaluation count), `out/benchmark.csv`, `out/benchmark-dev.csv`,
+`out/benchmark.lock`, printed markdown tables.
 
 To stop safely press **Ctrl+C**: the checkpoint written after the last completed
 generation is valid; a partially completed generation is simply replayed on
