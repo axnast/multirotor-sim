@@ -111,7 +111,9 @@ describe("M6 tuning cost", () => {
     const bothSeeds = suite.evaluate(bad, [1, 2]).total;
     expect(bothSeeds).not.toBe(onlySeed1);
     expect(suite.evaluate(base, [1, 2, 3, 4, 5]).total).toBeCloseTo(1, 12);
-  }, 30_000);
+    // Five full-horizon cost suites; under full-suite worker contention this
+    // takes ~30-40 s. This is a harness timeout, not a physics tolerance.
+  }, 120_000);
 
   it("is deterministic for a fixed seed subset", () => {
     const first = suite.evaluate(base, SEEDS);
