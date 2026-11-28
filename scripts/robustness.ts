@@ -38,6 +38,8 @@ const CONDITIONS: readonly Condition[] = [
   { id: "nominal", label: "nominal", options: {}, override: null },
   { id: "lat5", label: "latency 5 ms", options: { measurementLatencySteps: 5 }, override: null },
   { id: "lat10", label: "latency 10 ms", options: { measurementLatencySteps: 10 }, override: null },
+  { id: "lat50", label: "latency 50 ms", options: { measurementLatencySteps: 50 }, override: null },
+  { id: "lat100", label: "latency 100 ms", options: { measurementLatencySteps: 100 }, override: null },
   { id: "sensor2", label: "sensor sigma x2", options: { sensorScale: 2 }, override: null },
   { id: "wind90", label: "wind from +y (90 deg)", options: { windDirectionDeg: 90 }, override: null },
   { id: "wind45", label: "wind from 45 deg", options: { windDirectionDeg: 45 }, override: null },
@@ -136,6 +138,8 @@ interface Summary {
   readonly overshoot: number;
   readonly settling: number;
   readonly maxTiltDeg: number;
+  readonly maxJitter: number;
+  readonly maxPeakMotorRate: number;
   readonly sustainedSaturation: number;
   readonly failures: readonly string[];
 }
@@ -153,6 +157,8 @@ function summarize(condition: string, controller: string): Summary {
     overshoot: mean(step.map((row) => row.overshoot)),
     settling: mean(step.map((row) => row.settling)),
     maxTiltDeg: (max(all.map((row) => row.maxTilt)) * 180) / Math.PI,
+    maxJitter: max(all.map((row) => row.jitter)),
+    maxPeakMotorRate: max(all.map((row) => row.peakMotorRate)),
     sustainedSaturation: max(all.map((row) => row.sustainedSaturation)),
     failures,
   };
@@ -173,8 +179,12 @@ console.log(
   "Post-hoc, not pre-registered, not used for any decision about the candidate. " +
     "Latency is measurement (sensor-to-controller) latency only; actuator latency is zero.",
 );
-console.log("\n| condition | controller | light RMS | gusty RMS | strong RMS | step overshoot | step settling | max tilt | sustained sat | failures |");
-console.log("|---|---|---:|---:|---:|---:|---:|---:|---:|---|");
+console.log(
+  "Max tilt, jitter and motor rate are maxima over the step/light/gusty/strong rollouts and seeds " +
+    "(jitter rad/s, motor rate rad/s^2).",
+);
+console.log("\n| condition | controller | light RMS | gusty RMS | strong RMS | step overshoot | step settling | max tilt | max jitter | max motor rate | sustained sat | failures |");
+console.log("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|");
 for (const condition of CONDITIONS) {
   for (const controller of CONTROLLERS) {
     const summary = summaries.get(`${condition.id}|${controller.id}`)!;
@@ -182,7 +192,8 @@ for (const condition of CONDITIONS) {
       `| ${condition.label} | ${controller.label} | ${summary.rms.light.toFixed(3)} | ` +
         `${summary.rms.gusty.toFixed(3)} | ${summary.rms.strong.toFixed(3)} | ` +
         `${summary.overshoot.toFixed(3)} | ${summary.settling.toFixed(2)} | ` +
-        `${summary.maxTiltDeg.toFixed(2)} deg | ${summary.sustainedSaturation.toFixed(4)} | ` +
+        `${summary.maxTiltDeg.toFixed(2)} deg | ${summary.maxJitter.toFixed(3)} | ` +
+        `${summary.maxPeakMotorRate.toFixed(0)} | ${summary.sustainedSaturation.toFixed(4)} | ` +
         `${summary.failures.length === 0 ? "none" : `${summary.failures.length}: ${summary.failures.join("; ")}`} |`,
     );
   }

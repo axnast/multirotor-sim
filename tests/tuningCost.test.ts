@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultControllerParams } from "../src/core/control/controller";
+import type { MultirotorState } from "../src/core/multirotor/dynamics";
+import { QUAT_IDENTITY, quatFromAxisAngle } from "../src/core/math/quat";
 import { makeHex } from "../src/core/multirotor/config";
 import {
   COST_KEYS,
@@ -9,6 +11,7 @@ import {
   createCostSuite,
   gradedPenalty,
   rollout,
+  tiltOf,
 } from "../src/core/tuning/cost";
 import {
   DIMENSION,
@@ -129,4 +132,20 @@ describe("M6 tuning cost", () => {
     });
     expect(delayed).not.toEqual(plain);
   }, 30_000);
+
+  it("computes max tilt from [w,x,y,z] quaternions", () => {
+    const at = (orientation: MultirotorState["body"]["orientation"]) =>
+      tiltOf({
+        body: {
+          position: [0, 0, 5],
+          velocity: [0, 0, 0],
+          orientation,
+          angularVelocity: [0, 0, 0],
+        },
+        motorSpeeds: [0, 0, 0, 0, 0, 0],
+      });
+    expect(at(QUAT_IDENTITY)).toBe(0);
+    expect(at(quatFromAxisAngle([1, 0, 0], 0.3))).toBeCloseTo(0.3, 12);
+    expect(at(quatFromAxisAngle([0, 1, 0], 0.8))).toBeCloseTo(0.8, 12);
+  });
 });

@@ -439,7 +439,7 @@ export function rollout(
   };
 }
 
-function tiltOf(state: MultirotorState): number {
+export function tiltOf(state: MultirotorState): number {
   // Quat order is [w, x, y, z]; body +z in world has R33 = 1 - 2(x^2 + y^2).
   const [, x, y] = state.body.orientation;
   const worldZ = 1 - 2 * (x! * x! + y! * y!);

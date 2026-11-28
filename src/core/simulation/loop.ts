@@ -101,6 +101,8 @@ export interface StepResult {
   readonly environment: Environment;
   readonly ground: GroundContactResult | null;
   readonly contact: boolean;
+  /** Exactly the measurement handed to the controller this step. */
+  readonly controllerMeasurement: Measurement;
   /** Measurement-latency buffer to carry forward; undefined at zero latency. */
   readonly measurementHistory?: readonly Measurement[];
 }
@@ -198,6 +200,7 @@ export function simulateStep(
     environment,
     ground: result.ground,
     contact: result.ground?.contacted ?? false,
+    controllerMeasurement: measurement,
     ...(measurementHistory === undefined ? {} : { measurementHistory }),
   };
 }

@@ -163,65 +163,86 @@ do in the nominal condition, not whether either controller is good in absolute
 terms.
 
 **Conditions.** Nominal (reference) plus: measurement/control latency of
-**5 ms** and **10 ms** (the controller sees the measurement delayed by that many
-1 ms steps; **this is sensor-to-controller latency only, actuator latency
-remains zero**); sensor-noise sigmas **×2**; mean wind from **+y** (90°) and
-from **45°** instead of +x; and the existing **kT −10 % / tau +30 %** and
-**mass +10 %** plant mismatch. For each condition and controller: light, gusty
-and strong RMS (mean over seeds), 5 m step overshoot and settling (mean over
-seeds), max tilt (max over seeds, fixed quaternion order), sustained saturation
-fraction (max over seeds), and failures.
+**5 ms**, **10 ms**, **50 ms** and **100 ms** (the controller sees the
+measurement delayed by that many 1 ms steps; **this is sensor-to-controller
+latency only, actuator latency remains zero**); sensor-noise sigmas **×2**;
+mean wind from **+y** (90°) and from **45°** instead of +x; and the existing
+**kT −10 % / tau +30 %** and **mass +10 %** plant mismatch. For each condition
+and controller: light, gusty and strong RMS (mean over seeds), 5 m step
+overshoot and settling (mean over seeds), max tilt (max over seeds, fixed
+quaternion order), max motor jitter and peak motor rate (maxima over the four
+rollout types and seeds), sustained saturation fraction (max over seeds), and
+failures.
 
 ### Results (dev seeds 1–5, full 120 s)
 
-Run on the committed tuned vector (`data/tunedGains.json`), 480 rollouts, 8
-workers. `M3 gate` is `integralDwell = 0` with default gains.
+Run on the committed tuned vector (`data/tunedGains.json`), 600 rollouts, 8
+workers. `M3 gate` is `integralDwell = 0` with default gains. Max tilt, jitter
+and motor rate are maxima over the step/light/gusty/strong rollouts and seeds
+(jitter rad/s, motor rate rad/s²).
 
-| condition | controller | light RMS | gusty RMS | strong RMS | step overshoot | step settling | max tilt | sustained sat | failures |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| nominal | M3 gate | 0.694 | 3.579 | 4.747 | 0.042 | 14.00 | 30.11° | 0.0000 | none |
-| nominal | M5 default | 0.665 | 3.579 | 4.747 | 0.042 | 14.00 | 30.11° | 0.0000 | none |
-| nominal | autotuned | 0.112 | 0.921 | 0.958 | 0.064 | 5.56 | 30.01° | 0.0000 | none |
-| latency 5 ms | M3 gate | 0.693 | 3.579 | 4.747 | 0.042 | 13.99 | 30.11° | 0.0000 | none |
-| latency 5 ms | M5 default | 0.666 | 3.579 | 4.747 | 0.042 | 13.99 | 30.11° | 0.0000 | none |
-| latency 5 ms | autotuned | 0.112 | 0.921 | 0.958 | 0.065 | 5.55 | 30.00° | 0.0000 | none |
-| latency 10 ms | M3 gate | 0.694 | 3.579 | 4.748 | 0.042 | 13.98 | 30.10° | 0.0000 | none |
-| latency 10 ms | M5 default | 0.666 | 3.579 | 4.748 | 0.042 | 13.98 | 30.10° | 0.0000 | none |
-| latency 10 ms | autotuned | 0.112 | 0.921 | 0.958 | 0.066 | 5.54 | 30.00° | 0.0000 | none |
-| sensor sigma ×2 | M3 gate | 0.684 | 3.578 | 4.743 | 0.058 | 13.68 | 30.10° | 0.0000 | none |
-| sensor sigma ×2 | M5 default | 0.657 | 3.578 | 4.743 | 0.058 | 13.68 | 30.10° | 0.0000 | none |
-| sensor sigma ×2 | autotuned | 0.113 | 0.923 | 0.959 | 0.079 | 5.44 | 30.00° | 0.0000 | none |
-| wind from +y (90°) | M3 gate | 0.722 | 3.743 | 4.921 | 0.042 | 14.00 | 30.14° | 0.0000 | none |
-| wind from +y (90°) | M5 default | 0.693 | 3.743 | 4.921 | 0.042 | 14.00 | 30.14° | 0.0000 | none |
-| wind from +y (90°) | autotuned | 0.112 | 0.935 | 0.945 | 0.064 | 5.56 | 30.03° | 0.0000 | none |
-| wind from 45° | M3 gate | 0.707 | 3.748 | 4.954 | 0.042 | 14.00 | 30.18° | 0.0000 | none |
-| wind from 45° | M5 default | 0.668 | 3.748 | 4.954 | 0.042 | 14.00 | 30.18° | 0.0000 | none |
-| wind from 45° | autotuned | 0.113 | 0.962 | 1.012 | 0.064 | 5.56 | 30.02° | 0.0000 | none |
-| kT −10 %, tau +30 % | M3 gate | 2.130 | 3.520 | 4.581 | 0.000 | 120.00 | 26.24° | 0.0000 | 1: ground contact in flight |
-| kT −10 %, tau +30 % | M5 default | 1.596 | 3.520 | 4.581 | 0.008 | 81.28 | 26.24° | 0.0000 | 1: ground contact in flight |
-| kT −10 %, tau +30 % | autotuned | 0.128 | 1.029 | 1.088 | 0.006 | 19.78 | 30.05° | 0.0000 | none |
-| mass +10 % | M3 gate | 1.893 | 3.962 | 4.294 | 0.000 | 120.00 | 26.93° | 0.0000 | 1: ground contact in flight |
-| mass +10 % | M5 default | 1.358 | 3.962 | 4.294 | 0.010 | 79.06 | 26.93° | 0.0000 | 1: ground contact in flight |
-| mass +10 % | autotuned | 0.115 | 0.919 | 0.945 | 0.006 | 19.35 | 30.00° | 0.0000 | none |
+| condition | controller | light RMS | gusty RMS | strong RMS | step overshoot | step settling | max tilt | max jitter | max motor rate | sustained sat | failures |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| nominal | M3 gate | 0.694 | 3.579 | 4.747 | 0.042 | 14.00 | 30.11° | 0.052 | 266 | 0.0000 | none |
+| nominal | M5 default | 0.665 | 3.579 | 4.747 | 0.042 | 14.00 | 30.11° | 0.052 | 266 | 0.0000 | none |
+| nominal | autotuned | 0.112 | 0.921 | 0.958 | 0.064 | 5.56 | 30.01° | 0.174 | 923 | 0.0000 | none |
+| latency 5 ms | M3 gate | 0.693 | 3.579 | 4.747 | 0.042 | 13.99 | 30.11° | 0.052 | 266 | 0.0000 | none |
+| latency 5 ms | M5 default | 0.666 | 3.579 | 4.747 | 0.042 | 13.99 | 30.11° | 0.052 | 266 | 0.0000 | none |
+| latency 5 ms | autotuned | 0.112 | 0.921 | 0.958 | 0.065 | 5.55 | 30.00° | 0.174 | 923 | 0.0000 | none |
+| latency 10 ms | M3 gate | 0.694 | 3.579 | 4.748 | 0.042 | 13.98 | 30.10° | 0.052 | 266 | 0.0000 | none |
+| latency 10 ms | M5 default | 0.666 | 3.579 | 4.748 | 0.042 | 13.98 | 30.10° | 0.052 | 266 | 0.0000 | none |
+| latency 10 ms | autotuned | 0.112 | 0.921 | 0.958 | 0.066 | 5.54 | 30.00° | 0.174 | 922 | 0.0000 | none |
+| latency 50 ms | M3 gate | 0.694 | 3.581 | 4.753 | 0.043 | 13.94 | 30.07° | 0.052 | 266 | 0.0000 | none |
+| latency 50 ms | M5 default | 0.666 | 3.582 | 4.753 | 0.043 | 13.94 | 30.07° | 0.052 | 266 | 0.0000 | none |
+| latency 50 ms | autotuned | 0.113 | 0.921 | 0.958 | 0.071 | 6.47 | 30.01° | 0.174 | 923 | 0.0000 | none |
+| latency 100 ms | M3 gate | 0.694 | 3.586 | 4.761 | 0.044 | 13.88 | 30.00° | 0.052 | 265 | 0.0000 | none |
+| latency 100 ms | M5 default | 0.640 | 3.586 | 4.761 | 0.044 | 13.88 | 30.00° | 0.052 | 265 | 0.0000 | none |
+| latency 100 ms | autotuned | 0.113 | 0.922 | 0.958 | 0.078 | 7.16 | 32.81° | 0.175 | 911 | 0.0000 | none |
+| sensor sigma ×2 | M3 gate | 0.684 | 3.578 | 4.743 | 0.058 | 13.68 | 30.10° | 0.104 | 539 | 0.0000 | none |
+| sensor sigma ×2 | M5 default | 0.657 | 3.578 | 4.743 | 0.058 | 13.68 | 30.10° | 0.104 | 539 | 0.0000 | none |
+| sensor sigma ×2 | autotuned | 0.113 | 0.923 | 0.959 | 0.079 | 5.44 | 30.00° | 0.347 | 1951 | 0.0000 | none |
+| wind from +y (90°) | M3 gate | 0.722 | 3.743 | 4.921 | 0.042 | 14.00 | 30.14° | 0.052 | 268 | 0.0000 | none |
+| wind from +y (90°) | M5 default | 0.693 | 3.743 | 4.921 | 0.042 | 14.00 | 30.14° | 0.052 | 268 | 0.0000 | none |
+| wind from +y (90°) | autotuned | 0.112 | 0.935 | 0.945 | 0.064 | 5.56 | 30.03° | 0.172 | 923 | 0.0000 | none |
+| wind from 45° | M3 gate | 0.707 | 3.748 | 4.954 | 0.042 | 14.00 | 30.18° | 0.052 | 266 | 0.0000 | none |
+| wind from 45° | M5 default | 0.668 | 3.748 | 4.954 | 0.042 | 14.00 | 30.18° | 0.052 | 266 | 0.0000 | none |
+| wind from 45° | autotuned | 0.113 | 0.962 | 1.012 | 0.064 | 5.56 | 30.02° | 0.172 | 923 | 0.0000 | none |
+| kT −10 %, tau +30 % | M3 gate | 2.130 | 3.520 | 4.581 | 0.000 | 120.00 | 26.24° | 0.038 | 195 | 0.0000 | 1: ground contact in flight |
+| kT −10 %, tau +30 % | M5 default | 1.596 | 3.520 | 4.581 | 0.008 | 81.28 | 26.24° | 0.038 | 195 | 0.0000 | 1: ground contact in flight |
+| kT −10 %, tau +30 % | autotuned | 0.128 | 1.029 | 1.088 | 0.006 | 19.78 | 30.05° | 0.126 | 666 | 0.0000 | none |
+| mass +10 % | M3 gate | 1.893 | 3.962 | 4.294 | 0.000 | 120.00 | 26.93° | 0.050 | 253 | 0.0000 | 1: ground contact in flight |
+| mass +10 % | M5 default | 1.358 | 3.962 | 4.294 | 0.010 | 79.06 | 26.93° | 0.050 | 253 | 0.0000 | 1: ground contact in flight |
+| mass +10 % | autotuned | 0.115 | 0.919 | 0.945 | 0.006 | 19.35 | 30.00° | 0.164 | 871 | 0.0000 | none |
 
 Flag-rule check (tuned/default RMS ratio versus its nominal value): the largest
-relative change is **1.18× nominal** (kT/tau, strong); every other condition is
-between **0.47× and 1.14×**. No condition is flagged: the tuned controller does
-not hard-fail or diverge anywhere, and no RMS ratio exceeds 2× its nominal
-value.
+**ratio-of-ratios** change is **1.18× nominal** (kT/tau, strong). This is not the
+absolute tuned RMS change: that row is
+`(1.088 / 4.581) / (0.958 / 4.747) = 1.176`, because the default strong RMS also
+moves from 4.747 to 4.581. In absolute tuned terms the same row is
+`1.088 / 0.958 = 1.136×`, and the largest absolute tuned change is light under
+kT/tau, `0.128 / 0.112 = 1.143×`. No condition is flagged: the tuned controller
+does not hard-fail or diverge anywhere, and no ratio-of-ratios exceeds 2×.
 
 **Findings.** The tuned gains do **not** degrade more than the default in any
-tested condition and never go unstable or hard-fail. Latency (5/10 ms) and ×2
-sensor noise leave tuned RMS essentially unchanged (≤ 2 %); sustained saturation
-stays exactly 0, so the high-gain loop does not exhibit chatter that the
-noise-free parts of the model merely tolerate. +y and 45° mean wind change tuned
-RMS by at most ~5.6 % (strong, 45°), the same order as the default. Under
-kT −10 %/tau +30 % and mass +10 %, the **default hard-fails once** (ground
-contact in flight in light wind) while the tuned controller does not; its RMS
-ratios to default actually improve. The mismatch rows are still a real absolute
-degradation for the tuned controller: step settling rises from 5.6 s to ~19–20 s
-and strong-wind RMS rises ~13 %. Max tilt reaches the controller's ~30° clamp in
-wind for both controllers; it is a command limit, not a simulator artifact.
+tested condition and never go unstable or hard-fail. Latency 5/10 ms and ×2
+sensor noise leave tuned RMS essentially unchanged (≤ 2 %). The 50/100 ms
+positive control is still stable: at 100 ms the tuned step settles in 7.16 s
+versus 5.56 s nominal, overshoot rises from 0.064 m to 0.078 m, and max tilt
+reaches 32.81° (the command clamp is 30°, so the lag overshoots it) with no
+failure. Sustained saturation stays exactly 0 everywhere, so the high-gain loop
+does not exhibit chatter that the noise-free parts of the model merely tolerate;
+motor activity is nevertheless high: tuned max jitter is 0.174 vs 0.052 rad/s
+for default and max motor rate 923 vs 266 rad/s², roughly 3.3–3.5×, doubling
+again under ×2 sensor noise. +y and 45° mean wind change tuned RMS by at most
+~5.6 % (strong, 45°), the same order as the default.
+
+Under kT −10 %/tau +30 % and mass +10 %, the **default hard-fails once**
+(ground contact in flight in light wind) while the tuned controller does not;
+its ratio to default improves. The mismatch rows are still a real absolute
+limitation for the tuned controller: step settling rises from 5.56 s nominal to
+19.35–19.78 s (**~3.5× worse**), although that is still ~4× faster than the
+default's 79–81 s in the same runs. Max tilt reaches the ~30° clamp in wind for
+both controllers; it is a command limit, not a simulator artifact.
 
 ## Scope and fixed controller structure
 
