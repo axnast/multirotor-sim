@@ -81,6 +81,97 @@ maximum is **0.4500 N·m at 30 N** (4.800 rad/s²). The hand calculation
 acceleration limit is 1.8835 rad/s² ≈ 0.1766 N·m, so the ZN torque demand is
 far beyond the available yaw authority.
 
+## Deviations from the pre-registered protocol
+
+This section records what the completed 750-evaluation run actually did. Where
+it conflicts with the pre-registered text above, this section is authoritative.
+
+**(a) One seed per generation, not a two-seed subset.** The evaluator reduced
+every seed list to its first element (`seeds[0]`). Generation *g* therefore used
+**one** dev seed, rotating `1, 2, 3, 4, 5` by generation (the in-run history
+shows rotations such as `5|1`), instead of the planned two-seed subsets
+`[(1,2),(2,3),(3,4),(4,5),(5,1)]`. Common random numbers within a generation
+still held: every candidate in generation *g* used the same single seed.
+Consequently no in-run cost is comparable across generations by itself, which
+is why the extension rule used re-scores.
+
+**(b) Winner = in-run incumbent; the top-5 re-score did not happen.** Candidate
+vectors beyond the incumbent were not persisted in the checkpoint or the JSON,
+so the pre-registered "top-5 full-length dev-seed 1–5 re-score" could not be
+performed after the run. The reported winner is the final in-run incumbent (the
+best candidate seen in the run), not the winner of a top-5 re-score. Only the
+winner vector is stored.
+
+**(c) The extension rule was applied to single-seed values.** The recorded
+generation-60 and generation-75 re-scores were computed with the same
+`seeds[0]` bug, so they re-evaluated **seed 1**, not dev seeds 1–5. Both
+incumbent vectors came from seed-1 generations. The observed values were
+`0.117415 -> 0.116469`, an improvement of **0.81 %**, below the 2 % threshold.
+The generation-60 incumbent vector was not saved, so a corrected five-seed
+re-score of that exact candidate cannot be reconstructed; the decision is
+therefore **do not extend**, recorded as made on the single-seed values.
+
+**(d) Corrected five-seed baselines.** Every earlier "dev seeds 1–5" cost in
+this document and in commit messages was actually **seed 1 only** for the same
+reason. Corrected values on dev seeds 1–5 (full 120 s runs, current cost code):
+
+| variant | earlier value (seed 1) | corrected (seeds 1–5) |
+|---|---:|---:|
+| M5 default | 1.000000 | 1.000000000 |
+| ZN ultimate-gain | 1.453672 | 1.529218277 |
+| ZN reaction-curve PID | 1e6 -> 140.147186 | 138.980368633 |
+| ZN reaction-curve PI | 1e6 -> 133.732190 | 134.236504063 |
+| ZN reaction-curve PI (rate only) | 1.070655 | 1.068490376 |
+| autotuned | 0.116469 | 0.122455498 |
+
+The ZN reaction-curve full history is: **1e6** under the old constant penalty
+(a startup-saturation artifact, not a real cost) -> **140.147186 / 133.732190**
+after the graded penalty was introduced, still on seed 1 -> **138.980369 /
+134.236504** on five seeds. Both variants remain hard failures; the numbers are
+penalties, not valid tracking costs.
+
+**(e) The result is bound-limited.** Position `kp` is exactly at its upper
+bound (**1.0**, 4× the default) and position `ki` is within 2 % of its upper
+bound (**0.1982** vs **0.2**). Wider bounds could do better; this run cannot
+say how much. A second tuning attempt with wider bounds would have to be
+reported as such, and the held-out benchmark would have to be repeated for any
+such new candidate.
+
+**`tiltOf` bug (fixed in `7a9b105`).** `cost.ts` decoded the quaternion as
+`[x, y, z, w]` while `Quat` is `[w, x, y, z]`, so `RolloutMetrics.maxTilt` was
+always `pi`. Max tilt is **not** one of the eleven cost terms (those use
+overshoot/settling/ISE, RMS, contact seconds and jitter), so the bug did not
+touch any cost, candidate selection, the objective, the gains digest, or any
+earlier reported tuning/benchmark number. The `max_tilt_rad` column in
+`scripts/benchmark.ts` would have been wrong; the benchmark has **not** been
+run. Earlier max-tilt figures in `docs/control.md` (5.53°, 31.4°) come from
+`tests/controlCascade.test.ts` via `quatToEulerZYX`, not from `tiltOf`, and are
+unaffected by this bug.
+
+## Exploratory robustness (post-hoc, pre-specified rule)
+
+The following is **exploratory, post-hoc, not pre-registered, and not used for
+any decision about the candidate**. It does not change the candidate, the
+protocol, or the benchmark. It is run on dev seeds 1–5 only; no held-out seed is
+consulted.
+
+**Flag rule, fixed before the table was computed.** A condition is flagged if
+the tuned controller (i) hard-fails, (ii) diverges, or (iii) its RMS ratio to
+the default exceeds **2× its nominal-condition ratio**. The last test asks
+whether tuned gains degrade *relative to default* much more than they already
+do in the nominal condition, not whether either controller is good in absolute
+terms.
+
+**Conditions.** Nominal (reference) plus: measurement/control latency of
+**5 ms** and **10 ms** (the controller sees the measurement delayed by that many
+1 ms steps; **this is sensor-to-controller latency only, actuator latency
+remains zero**); sensor-noise sigmas **×2**; mean wind from **+y** (90°) and
+from **45°** instead of +x; and the existing **kT −10 % / tau +30 %** and
+**mass +10 %** plant mismatch. For each condition and controller: light, gusty
+and strong RMS (mean over seeds), 5 m step overshoot and settling (mean over
+seeds), max tilt (max over seeds, fixed quaternion order), sustained saturation
+fraction (max over seeds), and failures.
+
 ## Scope and fixed controller structure
 
 Not in scope: new physics, new disturbance models, controller structure changes.
@@ -185,6 +276,10 @@ Model mismatch is applied to the plant config only (`PlantOverride` in the
 shared loop); the controller and mixer keep nominal constants.
 
 ## Seeds and selection
+
+> **Actual run (see "Deviations from the pre-registered protocol"):** the
+> evaluator used one seed per generation, the top-5 re-score was not performed,
+> and the winner is the in-run incumbent.
 
 Tuning/selection uses dev seeds **1–5 only**. Within a generation every
 candidate uses the **same** seed subset (common random numbers); the subset
