@@ -264,6 +264,207 @@ limitation for the tuned controller: step settling rises from 5.56 s nominal to
 default's 79–81 s in the same runs. Max tilt reaches the ~30° clamp in wind for
 both controllers; it is a command limit, not a simulator artifact.
 
+## Held-out benchmark results (seeds 1001-1020)
+
+Run on **2026-11-28** from commit `3a2bf0e` with `data/tunedGains.json` SHA-256
+`3fff4a67fb4070b755f9d435de476a440035c331711951b76f3fea685c6a9ea1` (gains and vector
+unchanged since the pre-run dev work). 20 held-out seeds, 120 s horizon, 1,280
+rollouts, 10,000 **paired** bootstrap resamples (seed indices resampled jointly
+across scenarios). The verbatim console record is
+`docs/results/benchmark-heldout-console.txt`; the per-rollout data is
+`out/benchmark.csv`. The benchmark is one-shot: `out/benchmark.lock` records
+the run, and any re-run requires `--allow-rerun` and must be reported as a
+second attempt. The robustness block used only the first five held-out seeds
+(1001-1005); all other tables use all 20.
+
+### Headline (pre-held-out amendment): geometric mean tuned/baseline RMS, four stochastic gust scenarios (light, moderate, gusty, strong)
+
+| baseline | ratio | bootstrap 95% CI |
+|---|---:|---:|
+| M3 gate | 0.2008 | [0.1950, 0.2079] |
+| M5 default | 0.2017 | [0.1959, 0.2092] |
+| gate off (reference) | 0.2580 | [0.2481, 0.2697] |
+| ZN ultimate-gain | 0.2039 | [0.1981, 0.2115] |
+| ZN reaction-curve PID | fails (no valid RMS) | excluded |
+| ZN reaction-curve PI | fails (no valid RMS) | excluded |
+| ZN reaction-curve PI (rate only) | 0.2019 | [0.1957, 0.2098] |
+
+### Secondary headline: all six scenarios (geometric mean tuned/baseline RMS)
+
+| baseline | ratio | bootstrap 95% CI |
+|---|---:|---:|
+| M3 gate | 0.0729 | [0.0713, 0.0748] |
+| M5 default | 0.0868 | [0.0850, 0.0892] |
+| gate off (reference) | 0.1128 | [0.1096, 0.1166] |
+| ZN ultimate-gain | 0.0820 | [0.0802, 0.0842] |
+| ZN reaction-curve PID | fails (no valid RMS) | excluded |
+| ZN reaction-curve PI | fails (no valid RMS) | excluded |
+| ZN reaction-curve PI (rate only) | 0.0864 | [0.0845, 0.0889] |
+
+### Secondary per-scenario: constant5 and mass20
+
+These are deterministic apart from sensor noise and dominated by integrator trim speed; they are reported separately, not in the headline.
+| baseline | scenario | tuned/default RMS ratio | ratio CI | mean paired diff (m) | paired diff CI | improved fraction |
+|---|---|---:|---:|---:|---:|---:|
+| M3 gate | constant5 | 0.0034 | [0.0032, 0.0035] | -2.1926 | [-2.1945, -2.1905] | 100% |
+| M3 gate | mass20 | 0.0273 | [0.0269, 0.0277] | -3.5761 | [-3.5789, -3.5732] | 100% |
+| M5 default | constant5 | 0.0057 | [0.0055, 0.0060] | -1.2901 | [-1.2945, -1.2857] | 100% |
+| M5 default | mass20 | 0.0452 | [0.0446, 0.0457] | -2.1221 | [-2.1270, -2.1171] | 100% |
+| gate off (reference) | constant5 | 0.0081 | [0.0077, 0.0084] | -0.9124 | [-0.9130, -0.9117] | 100% |
+| gate off (reference) | mass20 | 0.0576 | [0.0568, 0.0584] | -1.6423 | [-1.6436, -1.6410] | 100% |
+| ZN ultimate-gain | constant5 | 0.0039 | [0.0037, 0.0041] | -1.9082 | [-1.9415, -1.8698] | 100% |
+| ZN ultimate-gain | mass20 | 0.0453 | [0.0446, 0.0459] | -2.1158 | [-2.1241, -2.1062] | 100% |
+| ZN reaction-curve PID | constant5 | fails (no valid RMS) | excluded | - | - | - |
+| ZN reaction-curve PID | mass20 | fails (no valid RMS) | excluded | - | - | - |
+| ZN reaction-curve PI | constant5 | fails (no valid RMS) | excluded | - | - | - |
+| ZN reaction-curve PI | mass20 | fails (no valid RMS) | excluded | - | - | - |
+| ZN reaction-curve PI (rate only) | constant5 | 0.0055 | [0.0053, 0.0058] | -1.3375 | [-1.3417, -1.3332] | 100% |
+| ZN reaction-curve PI (rate only) | mass20 | 0.0453 | [0.0446, 0.0460] | -2.1156 | [-2.1241, -2.1058] | 100% |
+
+### Paired per-seed differences (tuned - baseline, m)
+
+| baseline | scenario | mean | SE | bootstrap CI | improved fraction |
+|---|---|---:|---:|---:|---:|
+| M3 gate | light | -0.5767 | 0.0084 | [-0.5923, -0.5604] | 100% |
+| M3 gate | moderate | -1.8729 | 0.0377 | [-1.9428, -1.8000] | 100% |
+| M3 gate | gusty | -2.6295 | 0.0837 | [-2.7862, -2.4681] | 100% |
+| M3 gate | strong | -3.7224 | 0.0882 | [-3.8876, -3.5542] | 100% |
+| M3 gate | constant5 | -2.1926 | 0.0010 | [-2.1945, -2.1906] | 100% |
+| M3 gate | mass20 | -3.5761 | 0.0015 | [-3.5789, -3.5734] | 100% |
+| M5 default | light | -0.5630 | 0.0102 | [-0.5819, -0.5432] | 100% |
+| M5 default | moderate | -1.8740 | 0.0380 | [-1.9445, -1.8008] | 100% |
+| M5 default | gusty | -2.6295 | 0.0837 | [-2.7862, -2.4681] | 100% |
+| M5 default | strong | -3.7224 | 0.0882 | [-3.8876, -3.5542] | 100% |
+| M5 default | constant5 | -1.2901 | 0.0024 | [-1.2946, -1.2856] | 100% |
+| M5 default | mass20 | -2.1221 | 0.0026 | [-2.1271, -2.1172] | 100% |
+| gate off (reference) | light | -0.3657 | 0.0109 | [-0.3861, -0.3448] | 100% |
+| gate off (reference) | moderate | -1.3025 | 0.0445 | [-1.3850, -1.2177] | 100% |
+| gate off (reference) | gusty | -2.2947 | 0.0890 | [-2.4631, -2.1267] | 100% |
+| gate off (reference) | strong | -2.6698 | 0.1016 | [-2.8591, -2.4750] | 100% |
+| gate off (reference) | constant5 | -0.9124 | 0.0003 | [-0.9130, -0.9117] | 100% |
+| gate off (reference) | mass20 | -1.6423 | 0.0007 | [-1.6436, -1.6410] | 100% |
+| ZN ultimate-gain | light | -0.5288 | 0.0135 | [-0.5543, -0.5025] | 100% |
+| ZN ultimate-gain | moderate | -1.8978 | 0.0400 | [-1.9732, -1.8210] | 100% |
+| ZN ultimate-gain | gusty | -2.5912 | 0.0848 | [-2.7521, -2.4282] | 100% |
+| ZN ultimate-gain | strong | -3.7649 | 0.0935 | [-3.9399, -3.5865] | 100% |
+| ZN ultimate-gain | constant5 | -1.9082 | 0.0188 | [-1.9411, -1.8700] | 100% |
+| ZN ultimate-gain | mass20 | -2.1158 | 0.0047 | [-2.1241, -2.1061] | 100% |
+| ZN reaction-curve PID | all | fails (no valid RMS) | - | excluded | - |
+| ZN reaction-curve PI | all | fails (no valid RMS) | - | excluded | - |
+| ZN reaction-curve PI (rate only) | light | -0.5583 | 0.0102 | [-0.5773, -0.5385] | 100% |
+| ZN reaction-curve PI (rate only) | moderate | -1.8749 | 0.0424 | [-1.9546, -1.7932] | 100% |
+| ZN reaction-curve PI (rate only) | gusty | -2.6372 | 0.0865 | [-2.7998, -2.4710] | 100% |
+| ZN reaction-curve PI (rate only) | strong | -3.7239 | 0.0950 | [-3.9035, -3.5428] | 100% |
+| ZN reaction-curve PI (rate only) | constant5 | -1.3375 | 0.0022 | [-1.3417, -1.3333] | 100% |
+| ZN reaction-curve PI (rate only) | mass20 | -2.1156 | 0.0049 | [-2.1242, -2.1056] | 100% |
+
+### Detail: mean RMS [20,120] / [20,60] / [90,120] (m)
+
+| scenario | M3 gate | M5 default | gate off (reference) | ZN ultimate-gain | ZN reaction-curve PID | ZN reaction-curve PI | ZN reaction-curve PI (rate only) | autotuned |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| light | 0.692 / 0.914 / 0.401 | 0.678 / 0.905 / 0.387 | 0.481 / 0.600 / 0.361 | 0.644 / 0.833 / 0.437 | fails (no valid RMS) | fails (no valid RMS) | 0.673 / 0.903 / 0.379 | 0.115 / 0.114 / 0.111 |
+| moderate | 2.309 / 2.974 / 1.448 | 2.311 / 2.974 / 1.450 | 1.739 / 2.087 / 1.379 | 2.334 / 2.995 / 1.469 | fails (no valid RMS) | fails (no valid RMS) | 2.311 / 2.974 / 1.456 | 0.437 / 0.439 / 0.419 |
+| gusty | 3.551 / 4.072 / 2.830 | 3.551 / 4.072 / 2.830 | 3.216 / 3.445 / 2.877 | 3.513 / 4.077 / 2.724 | fails (no valid RMS) | fails (no valid RMS) | 3.558 / 4.079 / 2.842 | 0.921 / 0.922 / 0.884 |
+| strong | 4.650 / 5.959 / 2.933 | 4.650 / 5.959 / 2.933 | 3.597 / 4.307 / 2.846 | 4.692 / 6.035 / 2.906 | fails (no valid RMS) | fails (no valid RMS) | 4.651 / 5.960 / 2.947 | 0.927 / 0.932 / 0.883 |
+| constant5 | 2.200 / 2.879 / 1.240 | 1.298 / 2.018 / 0.012 | 0.920 / 1.445 / 0.037 | 1.916 / 2.647 / 0.827 | fails (no valid RMS) | fails (no valid RMS) | 1.345 / 2.084 / 0.013 | 0.007 / 0.011 / 0.003 |
+| mass20 | 3.676 / 4.587 / 2.410 | 2.222 / 3.294 / 0.287 | 1.743 / 2.733 / 0.079 | 2.216 / 3.286 / 0.284 | fails (no valid RMS) | fails (no valid RMS) | 2.216 / 3.285 / 0.284 | 0.100 / 0.159 / 0.003 |
+
+### Secondary: step and square (mean over seeds)
+
+| variant | scenario | overshoot | ISE | max tilt | saturation steps | jitter | contacts |
+|---|---|---:|---:|---:|---:|---:|---:|
+| M3 gate | step | 0.0450 | 0.0364 | 0.0972 | 0 | 0.052 | 0 |
+| M3 gate | square | 0.0000 | 294.7463 | 0.0975 | 0 | 0.052 | 0 |
+| M5 default | step | 0.0450 | 0.0364 | 0.0972 | 0 | 0.052 | 0 |
+| M5 default | square | 0.0000 | 294.7463 | 0.0975 | 0 | 0.052 | 0 |
+| gate off (reference) | step | 0.6375 | 4.7131 | 0.0994 | 0 | 0.052 | 0 |
+| gate off (reference) | square | 0.0000 | 329.5250 | 0.0998 | 0 | 0.052 | 0 |
+| ZN ultimate-gain | step | 0.1044 | 1.2092 | 0.2158 | 0 | 0.331 | 0 |
+| ZN ultimate-gain | square | 0.0000 | 285.4184 | 0.3718 | 0 | 0.342 | 0 |
+| ZN reaction-curve PID | step | fails (no valid RMS) | - | - | - | - | - |
+| ZN reaction-curve PID | square | fails (no valid RMS) | - | - | - | - | - |
+| ZN reaction-curve PI | step | fails (no valid RMS) | - | - | - | - | - |
+| ZN reaction-curve PI | square | fails (no valid RMS) | - | - | - | - | - |
+| ZN reaction-curve PI (rate only) | step | 0.0328 | 0.0230 | 0.0734 | 0 | 0.225 | 0 |
+| ZN reaction-curve PI (rate only) | square | 0.0000 | 293.6752 | 0.0736 | 0 | 0.225 | 0 |
+| autotuned | step | 0.0669 | 0.0011 | 0.3950 | 0 | 0.172 | 0 |
+| autotuned | square | 0.0000 | 134.5388 | 0.3959 | 0 | 0.176 | 0 |
+
+### Robustness (reported, not tuned): tuned-gain degradation vs nominal step RMS
+
+| mismatch | tuned RMS / nominal |
+|---|---:|
+| mass +10% | 2.616x |
+| mass -10% | 2.359x |
+| kT -10% | 2.826x |
+| kT +10% | 1.674x |
+| tau +30% | 1.002x |
+
+### Interpretation (plain wording, no overselling)
+
+**a. Size and shape of the gain.** The headline 0.2017 [0.1959, 0.2092] against
+M5 default means about **5x lower RMS** (4.96x) in the four gust scenarios;
+every paired CI excludes zero and 100% of seeds improved in every scenario.
+Both windows have to be stated: tuned/default RMS is **0.126-0.226** in
+[20,60] s (4.4-7.9x better) but **0.287-0.312** in [90,120] s (3.2-3.5x,
+geometric mean about 3.4x). The tuned integrator trims the mean wind sooner;
+the late window is mostly residual gust response, where the benefit is smaller.
+
+**b. ZN is not a stronger baseline here.** A P-only position loop on a double
+integrator has no finite ultimate gain, so ZN could not tune the position loop
+and the default position gains were kept (pre-run amendment 2). ZN
+ultimate-gain wind RMS is essentially the default's (light 0.644 vs 0.678 m,
+moderate 2.334 vs 2.311 m, gusty 3.513 vs 3.551 m, strong 4.692 vs 4.650 m),
+the two ZN reaction-curve variants hard-fail, and rate-only ZN is headline
+0.2019. None of them beats the default in gust scenarios.
+
+**c. The two strong gust scenarios saturate available authority.** Tuned gusty
+and strong RMS are nearly equal (0.921 vs 0.927 m) although the default differs
+markedly (3.551 vs 4.650 m). Mean maximum tilt in strong wind is about 28 deg,
+close to the 30 deg command clamp, with 6 m/s^2 acceleration limits; this is an
+authority limit, not evidence that strong wind is being handled identically.
+
+**d. Costs, stated with their sources.** Held-out motor-command jitter is 0.172
+vs 0.052 rad/s (3.3x); peak motor rate has no held-out column, so the dev
+exploratory value (923 vs 266 rad/s^2, about 3.47x) is used and labelled as
+such. Held-out 5 m step overshoot is 0.0669 vs 0.0450 m and peak tilt is 0.3950
+rad (22.6 deg) vs 0.0972 rad (5.6 deg). Dev exploration found sensor sigma x2
+jitter 0.347 rad/s and tolerated measurement latency up to 100 ms, but with
+larger overshoot (0.078 vs 0.064 m) and 32.8 deg tilt. The held-out robustness
+block (seeds 1001-1005 only) shows tuned step RMS 2.359x (mass -10%),
+2.616x (mass +10%) and 2.826x (kT -10%) worse, but only 1.674x for kT +10% and
+1.002x for tau +30%; tuned nominal step RMS is 0.0033 m against default 0.0190
+m, so even the worst degraded case is about 0.0093 m, still below default's
+nominal. The default's dev exploratory light-wind RMS degrades from 0.665 to
+1.596 (kT -10%/tau +30%) and 1.358 m (mass +10%), about 2.4x and 2.0x; that is
+a different scenario and different seeds, labelled exploratory, not a
+held-out comparison. Held-out seeds are spent and were not reused.
+
+**e. The result is bound-limited.** Position kp sits exactly at its upper bound
+1.0 and ki is 0.198162, within 2% of the 0.2 upper bound. The gains are not an
+interior optimum; no further search was done after the held-out run.
+
+**f. Headline amendment disclosure.** The pre-registered "five stochastic
+scenarios" conflicted with six enumerated scenarios. With dev ratios already
+known, the four gust scenarios were deliberately chosen as the **less
+favourable** definition (dev geometric means about 0.200 for four gusts, 0.139
+with mass20, 0.099 with constant5), committed before the held-out run.
+
+**g. What the held-out seeds test.** Seeds 1001-1020 use the same wind process
+and +x mean wind direction as dev seeds 1-5. They test different random
+realizations, not other wind directions or processes; +y and 45 deg directions
+were only explored on dev seeds.
+
+**h. Model scope.** Plant constants are placeholders, actuator latency is zero,
+there are no ESC/motor current limits, and nothing here is hardware-validated.
+These gaps are disclosed rather than retrofitted: changing the physics would
+invalidate the committed candidate and require a second held-out attempt.
+
+**i. Square settling omitted.** The square path has four legs and never
+"settles" in the step sense, so the square settling column is dropped from
+user-facing tables (the raw console record keeps it). Step settling is kept.
+
+
 ## Scope and fixed controller structure
 
 Not in scope: new physics, new disturbance models, controller structure changes.
