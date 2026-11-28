@@ -29,7 +29,8 @@
     "tune:resume": "tsx scripts/autotune.ts --resume",
     "tune:extend": "tsx scripts/autotune.ts --extend",
     "benchmark": "tsx scripts/benchmark.ts",
-    "tune:baselines": "tsx scripts/scoreBaselines.ts"
+    "tune:baselines": "tsx scripts/scoreBaselines.ts",
+    "tune:robustness": "tsx scripts/robustness.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

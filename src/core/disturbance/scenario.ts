@@ -43,6 +43,10 @@ export interface ScenarioOptions {
   readonly sensors?: boolean;
   readonly stateOfCharge?: number;
   readonly payload?: PayloadEvent | null;
+  /** Multiplies every sensor sigma; 1 (default) is byte-identical. */
+  readonly sensorScale?: number;
+  /** Overrides the scenario's mean-wind direction; undefined keeps it. */
+  readonly windDirectionDeg?: number;
 }
 
 export function disturbanceParamsFor(
@@ -51,7 +55,8 @@ export function disturbanceParamsFor(
   options: ScenarioOptions = {},
 ): DisturbanceParams {
   const spec = SCENARIOS[scenario];
-  const direction = (spec.directionDeg * Math.PI) / 180;
+  const directionDeg = options.windDirectionDeg ?? spec.directionDeg;
+  const direction = (directionDeg * Math.PI) / 180;
   const horizontalSigma = spec.gustSigma;
   const pack = options.pack ?? REALISTIC_PACK;
   const battery: BatteryParams = batteryParams(
@@ -59,9 +64,15 @@ export function disturbanceParamsFor(
     options.stateOfCharge ?? 1,
     options.battery ?? false,
   );
+  const sensorScale = options.sensorScale ?? 1;
   const sensors: SensorParams = {
     ...DEFAULT_SENSOR_PARAMS,
     enabled: options.sensors ?? false,
+    positionSigma: DEFAULT_SENSOR_PARAMS.positionSigma * sensorScale,
+    velocitySigma: DEFAULT_SENSOR_PARAMS.velocitySigma * sensorScale,
+    attitudeSigmaRad: DEFAULT_SENSOR_PARAMS.attitudeSigmaRad * sensorScale,
+    gyroWhiteSigma: DEFAULT_SENSOR_PARAMS.gyroWhiteSigma * sensorScale,
+    gyroBiasWalkSigma: DEFAULT_SENSOR_PARAMS.gyroBiasWalkSigma * sensorScale,
   };
   return {
     seed,

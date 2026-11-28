@@ -52,6 +52,12 @@ export interface CoreState {
   readonly diagnostics: DisturbanceDiagnostics | null;
   /** Config actually used by the plant; the controller never sees it. */
   readonly trueConfig: MultirotorConfig;
+  /**
+   * Opt-in measurement latency buffer (`simulateStep`'s
+   * `measurementLatencySteps > 0`). Absent for every existing caller, so the
+   * default path is unchanged.
+   */
+  readonly measurementHistory?: readonly Measurement[];
 }
 
 /**
@@ -95,6 +101,8 @@ export interface StepResult {
   readonly environment: Environment;
   readonly ground: GroundContactResult | null;
   readonly contact: boolean;
+  /** Measurement-latency buffer to carry forward; undefined at zero latency. */
+  readonly measurementHistory?: readonly Measurement[];
 }
 
 /** The uncorrupted simulator state is the controller measurement by default. */
@@ -118,6 +126,7 @@ export function simulateStep(
   setpoint: Setpoint,
   dt: number,
   plantOverride: PlantOverride | null = null,
+  measurementLatencySteps = 0,
 ): StepResult {
   const truth = measurementOf(state.multirotor);
   const disturbed =
@@ -131,9 +140,23 @@ export function simulateStep(
           dt,
         )
       : null;
+  // Measurement (sensor-to-controller) latency only: actuator latency stays
+  // zero. At latency 0 the controller receives exactly the same measurement
+  // object as before and no history is kept, so every digest is unchanged.
+  let measurement = disturbed?.measurement ?? truth;
+  let measurementHistory = state.measurementHistory;
+  if (measurementLatencySteps > 0) {
+    const pending = [...(state.measurementHistory ?? []), measurement];
+    const window =
+      pending.length > measurementLatencySteps + 1
+        ? pending.slice(pending.length - (measurementLatencySteps + 1))
+        : pending;
+    measurement = window[0]!;
+    measurementHistory = window;
+  }
   const command = controllerStepDetailed(
     state.controller,
-    disturbed?.measurement ?? truth,
+    measurement,
     setpoint,
     plant.params,
     dt,
@@ -175,6 +198,7 @@ export function simulateStep(
     environment,
     ground: result.ground,
     contact: result.ground?.contacted ?? false,
+    ...(measurementHistory === undefined ? {} : { measurementHistory }),
   };
 }
 

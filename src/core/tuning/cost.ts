@@ -151,6 +151,20 @@ function disturbance(
   });
 }
 
+/**
+ * Opt-in exploratory conditions. Every field defaults to the pre-registered
+ * behaviour, so omitting `options` is byte-identical to the original harness.
+ */
+export interface RolloutOptions {
+  readonly sensors?: boolean;
+  /** Multiplies every sensor sigma (1 = unchanged). */
+  readonly sensorScale?: number;
+  /** Controller sees the measurement delayed by this many 1 ms steps. */
+  readonly measurementLatencySteps?: number;
+  /** Mean-wind direction in degrees (undefined = scenario default, +x). */
+  readonly windDirectionDeg?: number;
+}
+
 function setpointFor(key: CostKey, time: number): readonly [number, number, number] {
   if (key === "step" || key === "mismatchKTau" || key === "mismatchMass") {
     return [5, 0, 5];
@@ -181,24 +195,41 @@ function initialState(config: MultirotorConfig): MultirotorState {
   };
 }
 
-function paramsFor(key: CostKey, seed: number, sensors = true): DisturbanceParams {
+function paramsFor(
+  key: CostKey,
+  seed: number,
+  options: RolloutOptions = {},
+): DisturbanceParams {
+  const sensorOptions = {
+    sensors: options.sensors ?? true,
+    ...(options.sensorScale === undefined ? {} : { sensorScale: options.sensorScale }),
+    ...(options.windDirectionDeg === undefined
+      ? {}
+      : { windDirectionDeg: options.windDirectionDeg }),
+  };
   if (key === "mass20") {
     return disturbance("calm", seed, {
-      sensors,
+      ...sensorOptions,
       payload: { atTime: 0, payload: PAYLOAD_MASS_20PCT },
     });
   }
   if (key === "mismatchMass") {
     return disturbance("calm", seed, {
-      sensors,
+      ...sensorOptions,
       payload: { atTime: 0, payload: { mass: 0.15, position: [0, 0, 0] } },
     });
   }
   if (key === "constant5") {
-    const calm = disturbance("calm", seed, { sensors });
+    const calm = disturbance("calm", seed, sensorOptions);
+    const direction = ((options.windDirectionDeg ?? 0) * Math.PI) / 180;
     return {
       ...calm,
-      wind: { ...calm.wind, enabled: true, mean: [5, 0, 0], gustSigma: [0, 0, 0] },
+      wind: {
+        ...calm.wind,
+        enabled: true,
+        mean: [5 * Math.cos(direction), 5 * Math.sin(direction), 0],
+        gustSigma: [0, 0, 0],
+      },
     };
   }
   const scenario: ScenarioId =
@@ -206,7 +237,7 @@ function paramsFor(key: CostKey, seed: number, sensors = true): DisturbanceParam
     key === "mismatchKTau"
       ? "calm"
       : key;
-  return disturbance(scenario, seed, { sensors });
+  return disturbance(scenario, seed, sensorOptions);
 }
 
 function overrideFor(key: CostKey): PlantOverride | null {
@@ -222,9 +253,9 @@ export function rollout(
   key: CostKey,
   steps: number,
   extraOverride: PlantOverride | null = null,
-  sensors = true,
+  options: RolloutOptions = {},
 ): RolloutMetrics {
-  const disturbanceParams = paramsFor(key, seed, sensors);
+  const disturbanceParams = paramsFor(key, seed, options);
   const active =
     disturbanceParams !== null && isDisturbanceActive(disturbanceParams)
       ? disturbanceParams
@@ -280,6 +311,7 @@ export function rollout(
       { position: desired, yaw: 0 },
       DT,
       override,
+      options.measurementLatencySteps ?? 0,
     );
     const position = result.state.body.position;
     const velocity = result.state.body.velocity;
@@ -365,6 +397,9 @@ export function rollout(
       disturbance: result.disturbance,
       diagnostics: result.diagnostics,
       trueConfig: result.trueConfig,
+      ...(result.measurementHistory === undefined
+        ? {}
+        : { measurementHistory: result.measurementHistory }),
     };
   }
 
@@ -489,14 +524,14 @@ export function createBaselineTable(
   config: MultirotorConfig = makeHex({ groundPlane: true }),
   baseParams: ControllerParams = defaultControllerParams(config),
   steps: number = FULL_STEPS,
-  sensors = true,
+  options: RolloutOptions = {},
 ): BaselineTable {
   const table: Record<string, Baseline> = {};
   for (const seeds of seedLists) {
     const id = seeds.join(",");
     for (const seed of seeds) {
       for (const key of COST_KEYS) {
-        const metrics = rollout(config, baseParams, seed, key, steps, null, sensors);
+        const metrics = rollout(config, baseParams, seed, key, steps, null, options);
         if (metrics.failure !== null && key !== "mass20") {
           throw new RangeError(`default gains fail ${key} on seed ${seed}: ${metrics.failure}`);
         }
@@ -519,7 +554,7 @@ export function createCostSuite(
   baseParams: ControllerParams = defaultControllerParams(config),
   steps: number = FULL_STEPS,
   precomputed: BaselineTable | null = null,
-  sensors = true,
+  options: RolloutOptions = {},
 ): CostSuite {
   assertFixedDefaults(baseParams);
   const baselines = new Map<string, Map<string, Baseline>>();
@@ -544,7 +579,7 @@ export function createCostSuite(
     const table = new Map<string, Baseline>();
     for (const seed of seeds) {
       for (const key of COST_KEYS) {
-        const metrics = rollout(config, baseParams, seed, key, steps, null, sensors);
+        const metrics = rollout(config, baseParams, seed, key, steps, null, options);
         if (metrics.failure !== null && key !== "mass20") {
           throw new RangeError(`default gains fail ${key} on seed ${seed}: ${metrics.failure}`);
         }
@@ -567,7 +602,7 @@ export function createCostSuite(
       for (const seed of seeds) {
         let logTotal = 0;
         for (const key of COST_KEYS) {
-          const metrics = rollout(config, params, seed, key, steps, null, sensors);
+          const metrics = rollout(config, params, seed, key, steps, null, options);
           const failed =
             metrics.failure !== null &&
             !(key === "mass20" && metrics.failure === "ground contact in flight");

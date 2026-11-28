@@ -8,6 +8,7 @@ import {
   TERM_WEIGHTS,
   createCostSuite,
   gradedPenalty,
+  rollout,
 } from "../src/core/tuning/cost";
 import {
   DIMENSION,
@@ -113,5 +114,19 @@ describe("M6 tuning cost", () => {
     const first = suite.evaluate(base, SEEDS);
     const second = suite.evaluate(base, SEEDS);
     expect(second).toEqual(first);
+  }, 30_000);
+
+  it("keeps latency opt-in and byte-identical at zero", () => {
+    const plain = rollout(config, base, 1, "step", 2_000);
+    const zero = rollout(config, base, 1, "step", 2_000, null, {
+      measurementLatencySteps: 0,
+      sensorScale: 1,
+      windDirectionDeg: 0,
+    });
+    expect(zero).toEqual(plain);
+    const delayed = rollout(config, base, 1, "step", 2_000, null, {
+      measurementLatencySteps: 5,
+    });
+    expect(delayed).not.toEqual(plain);
   }, 30_000);
 });

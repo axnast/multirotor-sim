@@ -172,6 +172,57 @@ and strong RMS (mean over seeds), 5 m step overshoot and settling (mean over
 seeds), max tilt (max over seeds, fixed quaternion order), sustained saturation
 fraction (max over seeds), and failures.
 
+### Results (dev seeds 1–5, full 120 s)
+
+Run on the committed tuned vector (`data/tunedGains.json`), 480 rollouts, 8
+workers. `M3 gate` is `integralDwell = 0` with default gains.
+
+| condition | controller | light RMS | gusty RMS | strong RMS | step overshoot | step settling | max tilt | sustained sat | failures |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| nominal | M3 gate | 0.694 | 3.579 | 4.747 | 0.042 | 14.00 | 30.11° | 0.0000 | none |
+| nominal | M5 default | 0.665 | 3.579 | 4.747 | 0.042 | 14.00 | 30.11° | 0.0000 | none |
+| nominal | autotuned | 0.112 | 0.921 | 0.958 | 0.064 | 5.56 | 30.01° | 0.0000 | none |
+| latency 5 ms | M3 gate | 0.693 | 3.579 | 4.747 | 0.042 | 13.99 | 30.11° | 0.0000 | none |
+| latency 5 ms | M5 default | 0.666 | 3.579 | 4.747 | 0.042 | 13.99 | 30.11° | 0.0000 | none |
+| latency 5 ms | autotuned | 0.112 | 0.921 | 0.958 | 0.065 | 5.55 | 30.00° | 0.0000 | none |
+| latency 10 ms | M3 gate | 0.694 | 3.579 | 4.748 | 0.042 | 13.98 | 30.10° | 0.0000 | none |
+| latency 10 ms | M5 default | 0.666 | 3.579 | 4.748 | 0.042 | 13.98 | 30.10° | 0.0000 | none |
+| latency 10 ms | autotuned | 0.112 | 0.921 | 0.958 | 0.066 | 5.54 | 30.00° | 0.0000 | none |
+| sensor sigma ×2 | M3 gate | 0.684 | 3.578 | 4.743 | 0.058 | 13.68 | 30.10° | 0.0000 | none |
+| sensor sigma ×2 | M5 default | 0.657 | 3.578 | 4.743 | 0.058 | 13.68 | 30.10° | 0.0000 | none |
+| sensor sigma ×2 | autotuned | 0.113 | 0.923 | 0.959 | 0.079 | 5.44 | 30.00° | 0.0000 | none |
+| wind from +y (90°) | M3 gate | 0.722 | 3.743 | 4.921 | 0.042 | 14.00 | 30.14° | 0.0000 | none |
+| wind from +y (90°) | M5 default | 0.693 | 3.743 | 4.921 | 0.042 | 14.00 | 30.14° | 0.0000 | none |
+| wind from +y (90°) | autotuned | 0.112 | 0.935 | 0.945 | 0.064 | 5.56 | 30.03° | 0.0000 | none |
+| wind from 45° | M3 gate | 0.707 | 3.748 | 4.954 | 0.042 | 14.00 | 30.18° | 0.0000 | none |
+| wind from 45° | M5 default | 0.668 | 3.748 | 4.954 | 0.042 | 14.00 | 30.18° | 0.0000 | none |
+| wind from 45° | autotuned | 0.113 | 0.962 | 1.012 | 0.064 | 5.56 | 30.02° | 0.0000 | none |
+| kT −10 %, tau +30 % | M3 gate | 2.130 | 3.520 | 4.581 | 0.000 | 120.00 | 26.24° | 0.0000 | 1: ground contact in flight |
+| kT −10 %, tau +30 % | M5 default | 1.596 | 3.520 | 4.581 | 0.008 | 81.28 | 26.24° | 0.0000 | 1: ground contact in flight |
+| kT −10 %, tau +30 % | autotuned | 0.128 | 1.029 | 1.088 | 0.006 | 19.78 | 30.05° | 0.0000 | none |
+| mass +10 % | M3 gate | 1.893 | 3.962 | 4.294 | 0.000 | 120.00 | 26.93° | 0.0000 | 1: ground contact in flight |
+| mass +10 % | M5 default | 1.358 | 3.962 | 4.294 | 0.010 | 79.06 | 26.93° | 0.0000 | 1: ground contact in flight |
+| mass +10 % | autotuned | 0.115 | 0.919 | 0.945 | 0.006 | 19.35 | 30.00° | 0.0000 | none |
+
+Flag-rule check (tuned/default RMS ratio versus its nominal value): the largest
+relative change is **1.18× nominal** (kT/tau, strong); every other condition is
+between **0.47× and 1.14×**. No condition is flagged: the tuned controller does
+not hard-fail or diverge anywhere, and no RMS ratio exceeds 2× its nominal
+value.
+
+**Findings.** The tuned gains do **not** degrade more than the default in any
+tested condition and never go unstable or hard-fail. Latency (5/10 ms) and ×2
+sensor noise leave tuned RMS essentially unchanged (≤ 2 %); sustained saturation
+stays exactly 0, so the high-gain loop does not exhibit chatter that the
+noise-free parts of the model merely tolerate. +y and 45° mean wind change tuned
+RMS by at most ~5.6 % (strong, 45°), the same order as the default. Under
+kT −10 %/tau +30 % and mass +10 %, the **default hard-fails once** (ground
+contact in flight in light wind) while the tuned controller does not; its RMS
+ratios to default actually improve. The mismatch rows are still a real absolute
+degradation for the tuned controller: step settling rises from 5.6 s to ~19–20 s
+and strong-wind RMS rises ~13 %. Max tilt reaches the controller's ~30° clamp in
+wind for both controllers; it is a command limit, not a simulator artifact.
+
 ## Scope and fixed controller structure
 
 Not in scope: new physics, new disturbance models, controller structure changes.
@@ -391,6 +442,7 @@ the controller keeping nominal values; report degradation, not only wins.
 npm run zn                 # regenerate ZN baselines and log
 npm run tune:probe         # one full default evaluation, breakdown + timing
 npm run tune:baselines     # score default + both ZN variants on dev seeds 1-5
+npm run tune:robustness    # exploratory latency/noise/wind/mismatch grid (dev seeds only)
 npm run tune -- --max-evals 20 --steps 2000   # smoke test only
 npm run tune               # start: 750 evaluations
 npm run tune:resume        # continue from out/autotune_checkpoint.json
